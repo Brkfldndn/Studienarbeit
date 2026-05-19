@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AgentId,
   defaultNegotiationSession,
@@ -325,7 +325,6 @@ export default function Page() {
           </div>
 
           <Conversation session={session} running={running} />
-          <EventLog session={session} />
         </section>
 
         <aside className="side">
@@ -413,15 +412,6 @@ function AgentPanel({
         />
       </div>
 
-      <div className="card">
-        <h3>Private Info</h3>
-        <textarea
-          rows={5}
-          value={agent.privateInfo}
-          onChange={(event) => updateAgent({ privateInfo: event.target.value })}
-        />
-      </div>
-
       <div className="card payoff-section">
         <div>
           <h3>Private Payoff Belief</h3>
@@ -459,13 +449,21 @@ function MemoryList({ title, items }: { title: string; items: string[] }) {
 }
 
 function Conversation({ session, running }: { session: NegotiationSession; running: boolean }) {
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const element = transcriptRef.current;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
+  }, [session.transcript.length, session.finalDecisions.A, session.finalDecisions.B]);
+
   return (
     <div className="card conversation">
       <div className="row-between">
         <h2>Live Negotiation</h2>
         {running && <span className="pulse">agent thinking</span>}
       </div>
-      <div className="transcript">
+      <div className="transcript" ref={transcriptRef}>
         {session.transcript.map((message) => (
           <article className={`bubble ${message.from === "A" ? "left" : "right"}`} key={message.id}>
             <div className="bubble-meta">
@@ -506,34 +504,6 @@ function FinalDecisionView({ agent, session }: { agent: AgentId; session: Negoti
       ) : (
         <p className="muted">Not submitted.</p>
       )}
-    </div>
-  );
-}
-
-function EventLog({ session }: { session: NegotiationSession }) {
-  return (
-    <div className="card event-log">
-      <h2>Event Trace</h2>
-      <div className="events">
-        {session.events.map((event) => (
-          <details key={event.id}>
-            <summary>
-              <span>{event.type}</span>
-              <span className="muted">turn {event.turn}</span>
-              {event.agent && <span style={{ color: agentColor[event.agent] }}>Agent {event.agent}</span>}
-            </summary>
-            <p>{event.content}</p>
-            {event.tokens && (
-              <p className="muted">
-                tokens: prompt {event.tokens.prompt || 0}, completion {event.tokens.completion || 0}, total{" "}
-                {event.tokens.total || 0}
-              </p>
-            )}
-            {event.raw && <pre>{event.raw}</pre>}
-          </details>
-        ))}
-        {session.events.length === 0 && <p className="muted">No events yet.</p>}
-      </div>
     </div>
   );
 }

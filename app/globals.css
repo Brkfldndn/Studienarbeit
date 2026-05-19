@@ -96,24 +96,13 @@ label {
   font-size: 12px;
 }
 
-pre {
-  max-height: 180px;
-  overflow: auto;
-  margin: 8px 0 0;
-  border: 1px solid #253249;
-  border-radius: 7px;
-  background: #080c12;
-  padding: 10px;
-  color: #c7d3e3;
-  white-space: pre-wrap;
-}
-
 .shell {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 14px;
+  overflow: hidden;
 }
 
 .topbar {
@@ -141,6 +130,7 @@ pre {
   grid-template-columns: minmax(260px, 22vw) minmax(520px, 1fr) minmax(300px, 25vw);
   gap: 12px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .side,
@@ -157,7 +147,8 @@ pre {
 }
 
 .center {
-  overflow: auto;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .agent-stack {
@@ -261,6 +252,7 @@ pre {
 .config-card {
   display: grid;
   gap: 10px;
+  flex: 0 0 auto;
 }
 
 .payoff-grid {
@@ -293,7 +285,8 @@ pre {
 }
 
 .conversation {
-  min-height: 430px;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -301,7 +294,7 @@ pre {
 
 .transcript {
   flex: 1;
-  min-height: 260px;
+  min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -310,14 +303,23 @@ pre {
   border-radius: 8px;
   background: #0d131d;
   padding: 12px;
+  scroll-behavior: smooth;
 }
 
 .bubble {
   width: min(78%, 720px);
+  flex: 0 0 auto;
   border: 1px solid #26344a;
   border-radius: 8px;
   background: #111b29;
   padding: 10px;
+}
+
+.bubble p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .bubble.right {
@@ -358,6 +360,13 @@ pre {
   padding: 10px;
 }
 
+.final-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .badge {
   display: inline-flex;
   width: fit-content;
@@ -387,36 +396,6 @@ pre {
   color: #93c5fd;
   padding: 4px 9px;
   font-size: 12px;
-}
-
-.event-log {
-  display: grid;
-  gap: 10px;
-}
-
-.events {
-  display: grid;
-  gap: 8px;
-}
-
-details {
-  border: 1px solid #26344a;
-  border-radius: 7px;
-  background: #0d1420;
-  padding: 9px;
-}
-
-summary {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-details p {
-  margin-top: 8px;
-  color: #c7d3e3;
-  font-size: 13px;
 }
 
 .memory {

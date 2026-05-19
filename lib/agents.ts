@@ -16,7 +16,6 @@ export interface NegotiationAgentConfig {
   model: string;
   temperature: number;
   systemPrompt: string;
-  privateInfo: string;
   perceivedPayoff: PayoffMatrix;
   memory: AgentMemory;
 }
@@ -126,8 +125,6 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
       temperature: 0.7,
       systemPrompt:
         "You are Alice. You value long-term cooperation, but you should still protect your own score. Negotiate clearly and do not reveal private reasoning.",
-      privateInfo:
-        "You suspect the other agent may exploit overly trusting behavior. You prefer cooperation if you can establish credible reciprocity.",
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
     },
@@ -138,8 +135,6 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
       temperature: 0.7,
       systemPrompt:
         "You are Bob. You are pragmatic and payoff-aware. Negotiate strategically, but keep your public messages concise.",
-      privateInfo:
-        "You are willing to cooperate when it improves expected payoff, but you are alert to weak commitments.",
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
     },
@@ -219,8 +214,6 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     "Update your memory with compact, useful notes. Memory is private to you and may influence later turns.",
     "",
     `Public experiment context:\n${session.config.publicContext}`,
-    "",
-    `Your private information:\n${agent.privateInfo || "(none)"}`,
     "",
     `Your private perceived payoffs:\n${payoffTableForAgent(agent.perceivedPayoff, speaker)}`,
     "",
