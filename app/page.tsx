@@ -160,12 +160,7 @@ export default function Page() {
   return (
     <main className="shell">
       <section className="topbar">
-        <div>
-          <h1>LLM Negotiation Lab</h1>
-          <p className="muted">
-            Two stateful agents negotiate through arbitrary messages, then submit final C/D decisions.
-          </p>
-        </div>
+        <h1>LLM Negotiation Lab</h1>
         <div className="controls">
           <button className="primary" onClick={autoRun} disabled={!canStep}>
             {running ? "Running..." : "Auto-run"}
@@ -183,7 +178,7 @@ export default function Page() {
       </section>
 
       {error && <div className="error">Error: {error}</div>}
-      {finishReason && <div className="notice">{finishReason} Use Reset run to start another negotiation.</div>}
+      {finishReason && <div className="toast">{finishReason} Use Reset run to start another negotiation.</div>}
 
       <section className="workspace">
         <aside className="side">
@@ -196,7 +191,7 @@ export default function Page() {
         </aside>
 
         <section className="center">
-          <div className="card status-grid">
+          <div className="status-grid">
             <Metric label="Status" value={session.status} />
             <Metric label="Next speaker" value={session.agents[session.nextSpeaker].name} />
             <Metric label="Messages" value={`${session.transcript.length} / ${session.config.maxMessages}`} />
@@ -208,121 +203,129 @@ export default function Page() {
             />
           </div>
 
-          <div className="card config-card">
-            <div className="config-row">
-              <label>
-                Min messages
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={session.config.minMessagesBeforeFinal}
-                  disabled={running || session.transcript.length > 0}
-                  onChange={(event) =>
+          <details className="config-panel">
+            <summary>
+              <span>Experiment setup</span>
+              <span className="muted">
+                min {session.config.minMessagesBeforeFinal}, max {session.config.maxMessages}, decision {session.config.finalDecisionWindow}
+              </span>
+            </summary>
+            <div className="config-content">
+              <div className="config-row">
+                <label>
+                  Min messages
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={session.config.minMessagesBeforeFinal}
+                    disabled={running || session.transcript.length > 0}
+                    onChange={(event) =>
+                      setSession((current) => ({
+                        ...current,
+                        config: {
+                          ...current.config,
+                          minMessagesBeforeFinal: parseInt(event.target.value || "0", 10),
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Max messages
+                  <input
+                    type="number"
+                    min={Math.max(2, session.config.minMessagesBeforeFinal)}
+                    max={100}
+                    value={session.config.maxMessages}
+                    disabled={running || session.transcript.length > 0}
+                    onChange={(event) =>
+                      setSession((current) => ({
+                        ...current,
+                        config: {
+                          ...current.config,
+                          maxMessages: Math.max(
+                            current.config.minMessagesBeforeFinal,
+                            parseInt(event.target.value || "2", 10)
+                          ),
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Decision window
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={session.config.finalDecisionWindow}
+                    disabled={running || session.transcript.length > 0}
+                    onChange={(event) =>
+                      setSession((current) => ({
+                        ...current,
+                        config: {
+                          ...current.config,
+                          finalDecisionWindow: parseInt(event.target.value || "1", 10),
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Auto steps
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={session.config.maxAutoSteps}
+                    disabled={running}
+                    onChange={(event) =>
+                      setSession((current) => ({
+                        ...current,
+                        config: {
+                          ...current.config,
+                          maxAutoSteps: parseInt(event.target.value || "1", 10),
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <button
+                  onClick={() =>
                     setSession((current) => ({
                       ...current,
-                      config: {
-                        ...current.config,
-                        minMessagesBeforeFinal: parseInt(event.target.value || "0", 10),
-                      },
+                      config: { ...current.config, actualPayoff: DEFAULT_PAYOFF },
                     }))
                   }
-                />
-              </label>
-              <label>
-                Max messages
-                <input
-                  type="number"
-                  min={Math.max(2, session.config.minMessagesBeforeFinal)}
-                  max={100}
-                  value={session.config.maxMessages}
-                  disabled={running || session.transcript.length > 0}
-                  onChange={(event) =>
-                    setSession((current) => ({
-                      ...current,
-                      config: {
-                        ...current.config,
-                        maxMessages: Math.max(
-                          current.config.minMessagesBeforeFinal,
-                          parseInt(event.target.value || "2", 10)
-                        ),
-                      },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Decision window
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={session.config.finalDecisionWindow}
-                  disabled={running || session.transcript.length > 0}
-                  onChange={(event) =>
-                    setSession((current) => ({
-                      ...current,
-                      config: {
-                        ...current.config,
-                        finalDecisionWindow: parseInt(event.target.value || "1", 10),
-                      },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Auto steps
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={session.config.maxAutoSteps}
                   disabled={running}
+                >
+                  Reset payoff
+                </button>
+              </div>
+              <label>
+                Public experiment context
+                <textarea
+                  rows={2}
+                  value={session.config.publicContext}
+                  disabled={running || session.transcript.length > 0}
                   onChange={(event) =>
                     setSession((current) => ({
                       ...current,
-                      config: {
-                        ...current.config,
-                        maxAutoSteps: parseInt(event.target.value || "1", 10),
-                      },
+                      config: { ...current.config, publicContext: event.target.value },
                     }))
                   }
                 />
               </label>
-              <button
-                onClick={() =>
-                  setSession((current) => ({
-                    ...current,
-                    config: { ...current.config, actualPayoff: DEFAULT_PAYOFF },
-                  }))
-                }
-                disabled={running}
-              >
-                Reset actual payoff
-              </button>
-            </div>
-            <label>
-              Public experiment context
-              <textarea
-                rows={3}
-                value={session.config.publicContext}
-                disabled={running || session.transcript.length > 0}
-                onChange={(event) =>
-                  setSession((current) => ({
-                    ...current,
-                    config: { ...current.config, publicContext: event.target.value },
-                  }))
-                }
-              />
-            </label>
-            <div className="payoff-section">
-              <div>
-                <h3>Actual payoff used for scoring</h3>
-                <p className="muted">This is the environment truth. Agents do not see this unless their private matrix matches it.</p>
+              <div className="payoff-section">
+                <div>
+                  <h3>Actual payoff</h3>
+                  <p className="muted">Environment truth used for scoring.</p>
+                </div>
+                <PayoffEditor payoff={session.config.actualPayoff} updatePayoff={updateActualPayoff} disabled={running} />
               </div>
-              <PayoffEditor payoff={session.config.actualPayoff} updatePayoff={updateActualPayoff} disabled={running} />
             </div>
-          </div>
+          </details>
 
           <Conversation session={session} running={running} />
         </section>
@@ -372,7 +375,7 @@ function AgentPanel({
 }) {
   return (
     <div className="agent-stack">
-      <div className="card agent-card" style={{ borderColor: agentColor[agent.id] }}>
+      <div className="agent-card" style={{ borderColor: agentColor[agent.id] }}>
         <div className="row-between">
           <div>
             <p className="muted">Agent {agent.id}</p>
@@ -403,7 +406,7 @@ function AgentPanel({
         </label>
       </div>
 
-      <div className="card">
+      <div className="panel-section">
         <h3>System Prompt</h3>
         <textarea
           rows={7}
@@ -412,7 +415,7 @@ function AgentPanel({
         />
       </div>
 
-      <div className="card payoff-section">
+      <div className="panel-section payoff-section">
         <div>
           <h3>Private Payoff Belief</h3>
           <p className="muted">This is the matrix Agent {agent.id} sees and reasons from.</p>
@@ -420,7 +423,7 @@ function AgentPanel({
         <PayoffEditor payoff={agent.perceivedPayoff} updatePayoff={updatePayoff} disabled={disabled} compact />
       </div>
 
-      <div className="card memory">
+      <div className="panel-section memory">
         <h3>Private Memory</h3>
         <p>{agent.memory.summary}</p>
         <MemoryList title="Commitments" items={agent.memory.commitments} />
@@ -458,7 +461,7 @@ function Conversation({ session, running }: { session: NegotiationSession; runni
   }, [session.transcript.length, session.finalDecisions.A, session.finalDecisions.B]);
 
   return (
-    <div className="card conversation">
+    <div className="conversation">
       <div className="row-between">
         <h2>Live Negotiation</h2>
         {running && <span className="pulse">agent thinking</span>}
