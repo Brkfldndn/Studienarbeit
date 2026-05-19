@@ -11,8 +11,6 @@ import {
 
 export const runtime = "nodejs";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 function payoffTable(p: PayoffMatrix, self: "A" | "B") {
   // Describe payoffs from this agent's perspective
   const get = (a: Move, b: Move) => {
@@ -41,6 +39,7 @@ function historyText(history: RoundResult[], self: "A" | "B") {
 }
 
 async function askAgent(params: {
+  client: OpenAI;
   agent: AgentConfig;
   self: "A" | "B";
   round: number;
@@ -50,7 +49,7 @@ async function askAgent(params: {
   communication: boolean;
   incomingMessage?: string;
 }): Promise<{ move: Move; reasoning: string; message?: string }> {
-  const { agent, self, round, totalRounds, payoff, history, communication, incomingMessage } =
+  const { client, agent, self, round, totalRounds, payoff, history, communication, incomingMessage } =
     params;
 
   const system =
@@ -98,6 +97,14 @@ async function askAgent(params: {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.OPENAI_API_KEY) {
+      return Response.json(
+        { ok: false, error: "OPENAI_API_KEY is not configured." },
+        { status: 500 }
+      );
+    }
+
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const body = (await req.json()) as {
       config: GameConfig;
       history: RoundResult[];
@@ -108,6 +115,7 @@ export async function POST(req: NextRequest) {
 
     const [a, b] = await Promise.all([
       askAgent({
+        client,
         agent: config.agentA,
         self: "A",
         round,
@@ -118,6 +126,7 @@ export async function POST(req: NextRequest) {
         incomingMessage: body.lastMessages?.fromB,
       }),
       askAgent({
+        client,
         agent: config.agentB,
         self: "B",
         round,
