@@ -303,20 +303,6 @@ export default function Page() {
                   Reset payoff
                 </button>
               </div>
-              <label>
-                Public experiment context
-                <textarea
-                  rows={2}
-                  value={session.config.publicContext}
-                  disabled={running || session.transcript.length > 0}
-                  onChange={(event) =>
-                    setSession((current) => ({
-                      ...current,
-                      config: { ...current.config, publicContext: event.target.value },
-                    }))
-                  }
-                />
-              </label>
               <div className="payoff-section">
                 <div>
                   <h3>Actual payoff</h3>

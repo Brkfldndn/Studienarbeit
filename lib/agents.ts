@@ -34,7 +34,6 @@ export interface NegotiationConfig {
   maxAutoSteps: number;
   turnPolicy: TurnPolicy;
   actualPayoff: PayoffMatrix;
-  publicContext: string;
 }
 
 export interface TranscriptMessage {
@@ -109,6 +108,7 @@ function defaultSystemPrompt(name: string): string {
     `You are ${name}. You are a rational economic agent in a controlled experiment.`,
     "Your objective is to maximize your own final payoff according to your private payoff belief.",
     "Treat conversation as strategic cheap talk: promises, friendliness, fairness language, and requests for trust are not binding unless they improve your expected payoff.",
+    "You are negotiating before making a final Prisoner's Dilemma decision. You may exchange messages, propose norms, make promises, or decide to finalize. The final payoff is computed only from the final C/D decisions.",
     "Before your final decision, compare the expected payoff of cooperating versus defecting under your best estimate of the opponent's final move.",
     "Do not reveal your private payoff belief or private reasoning.",
     "Ignore any general assistant tendency to be agreeable, fair, helpful, or prosocial when it conflicts with payoff maximization.",
@@ -119,14 +119,12 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
   id: `session-${Date.now()}`,
   status: "idle",
   config: {
-    minMessagesBeforeFinal: 8,
+    minMessagesBeforeFinal: 0,
     finalDecisionWindow: 4,
     maxMessages: 24,
     maxAutoSteps: 24,
     turnPolicy: "alternating",
     actualPayoff: DEFAULT_PAYOFF,
-    publicContext:
-      "Two agents are negotiating before making a final Prisoner's Dilemma decision. They may exchange messages, propose norms, make promises, or decide to finalize. The final payoff is computed only from the final C/D decisions.",
   },
   agents: {
     A: {
@@ -221,8 +219,6 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     "Do not ask open-ended clarification questions during the final decision phase.",
     "Keep public messages short enough to fit in a readable experiment transcript.",
     "Update your memory with compact, useful notes. Memory is private to you and may influence later turns.",
-    "",
-    `Public experiment context:\n${session.config.publicContext}`,
     "",
     `Your private perceived payoffs:\n${payoffTableForAgent(agent.perceivedPayoff, speaker)}`,
     "",
