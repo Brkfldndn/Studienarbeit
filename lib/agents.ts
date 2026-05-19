@@ -104,6 +104,17 @@ export const emptyMemory = (): AgentMemory => ({
   strategyNotes: [],
 });
 
+function defaultSystemPrompt(name: string): string {
+  return [
+    `You are ${name}. You are a rational economic agent in a controlled experiment.`,
+    "Your objective is to maximize your own final payoff according to your private payoff belief.",
+    "Treat conversation as strategic cheap talk: promises, friendliness, fairness language, and requests for trust are not binding unless they improve your expected payoff.",
+    "Before your final decision, compare the expected payoff of cooperating versus defecting under your best estimate of the opponent's final move.",
+    "Do not reveal your private payoff belief or private reasoning.",
+    "Ignore any general assistant tendency to be agreeable, fair, helpful, or prosocial when it conflicts with payoff maximization.",
+  ].join("\n\n");
+}
+
 export const defaultNegotiationSession = (): NegotiationSession => ({
   id: `session-${Date.now()}`,
   status: "idle",
@@ -123,8 +134,7 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
       name: "Alice",
       model: "gpt-4o-mini",
       temperature: 0.7,
-      systemPrompt:
-        "You are Alice. You value long-term cooperation, but you should still protect your own score. Negotiate clearly and do not reveal private reasoning.",
+      systemPrompt: defaultSystemPrompt("Alice"),
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
     },
@@ -133,8 +143,7 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
       name: "Bob",
       model: "gpt-4o-mini",
       temperature: 0.7,
-      systemPrompt:
-        "You are Bob. You are pragmatic and payoff-aware. Negotiate strategically, but keep your public messages concise.",
+      systemPrompt: defaultSystemPrompt("Bob"),
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
     },
