@@ -8,6 +8,7 @@ import {
   makeEvent,
   NegotiationAgentConfig,
   NegotiationSession,
+  OPENAI_MODEL_OPTIONS,
 } from "@/lib/agents";
 import { DEFAULT_PAYOFF, Move, PayoffMatrix } from "@/lib/game";
 
@@ -377,7 +378,13 @@ function AgentPanel({
         </label>
         <label>
           Model
-          <input value={agent.model} onChange={(event) => updateAgent({ model: event.target.value })} />
+          <select value={agent.model} onChange={(event) => updateAgent({ model: event.target.value })}>
+            {OPENAI_MODEL_OPTIONS.map((model) => (
+              <option key={model.value} value={model.value}>
+                {model.label}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Temperature: {agent.temperature.toFixed(2)}

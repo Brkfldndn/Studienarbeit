@@ -14,6 +14,16 @@ import {
 
 export const runtime = "nodejs";
 
+function chatParamsForModel(model: string, temperature: number) {
+  const params: { model: string; temperature?: number } = { model };
+
+  if (!model.startsWith("gpt-5") && !model.startsWith("o")) {
+    params.temperature = temperature;
+  }
+
+  return params;
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -44,7 +54,7 @@ export async function POST(req: NextRequest) {
               turn,
               type: "invalid_output",
               agent: speaker,
-              content: `${speakerAgent.name} was skipped because they already finalized.`,
+              content: `Agent ${speaker} was skipped because they already finalized.`,
             }),
           ],
         },
@@ -54,8 +64,7 @@ export async function POST(req: NextRequest) {
     const forceFinal = shouldForceFinalDecision(session, speaker);
     const { messages } = buildAgentMessages(session, speaker);
     let completion = await client.chat.completions.create({
-      model: speakerAgent.model,
-      temperature: speakerAgent.temperature,
+      ...chatParamsForModel(speakerAgent.model, speakerAgent.temperature),
       response_format: { type: "json_object" },
       messages,
     });
@@ -73,8 +82,7 @@ export async function POST(req: NextRequest) {
 
     if (forceFinal && action.kind === "message") {
       completion = await client.chat.completions.create({
-        model: speakerAgent.model,
-        temperature: Math.min(speakerAgent.temperature, 0.4),
+        ...chatParamsForModel(speakerAgent.model, Math.min(speakerAgent.temperature, 0.4)),
         response_format: { type: "json_object" },
         messages: [
           ...messages,
@@ -88,7 +96,7 @@ export async function POST(req: NextRequest) {
       raw = completion.choices[0]?.message?.content ?? "{}";
       action = parseAgentAction(raw);
       if (action.kind === "message") {
-        throw new Error(`${speakerAgent.name} did not submit a final decision during the final decision phase.`);
+        throw new Error(`Agent ${speaker} did not submit a final decision during the final decision phase.`);
       }
     }
     const updatedAgent = {
@@ -154,7 +162,7 @@ export async function POST(req: NextRequest) {
             turn,
             type: "final_decision",
             agent: speaker,
-            content: `${speakerAgent.name} finalized ${action.move}: ${action.rationale}`,
+            content: `Agent ${speaker} finalized ${action.move}: ${action.rationale}`,
             raw,
             tokens: tokenUsage,
           }),
@@ -173,7 +181,7 @@ export async function POST(req: NextRequest) {
           makeEvent({
             turn: turn + 1,
             type: "payoff_computed",
-            content: `Outcome ${payoff.outcome}: ${nextSession.agents.A.name} ${payoff.a}, ${nextSession.agents.B.name} ${payoff.b}`,
+            content: `Outcome ${payoff.outcome}: Agent A ${payoff.a}, Agent B ${payoff.b}`,
           }),
           makeEvent({
             turn: turn + 2,

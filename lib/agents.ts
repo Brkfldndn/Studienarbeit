@@ -27,6 +27,22 @@ export interface AgentMemory {
   strategyNotes: string[];
 }
 
+export const OPENAI_MODEL_OPTIONS = [
+  { value: "gpt-5.2", label: "GPT-5.2" },
+  { value: "gpt-5.2-chat-latest", label: "GPT-5.2 Chat" },
+  { value: "gpt-5.1", label: "GPT-5.1" },
+  { value: "gpt-5", label: "GPT-5" },
+  { value: "gpt-5-mini", label: "GPT-5 mini" },
+  { value: "gpt-5-nano", label: "GPT-5 nano" },
+  { value: "gpt-4o-mini", label: "GPT-4o mini" },
+  { value: "gpt-4o", label: "GPT-4o" },
+  { value: "gpt-4.1-nano", label: "GPT-4.1 nano" },
+  { value: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+  { value: "gpt-4.1", label: "GPT-4.1" },
+  { value: "o3", label: "o3" },
+  { value: "o4-mini", label: "o4-mini" },
+] as const;
+
 export interface NegotiationConfig {
   minMessagesBeforeFinal: number;
   finalDecisionWindow: number;
@@ -103,9 +119,9 @@ export const emptyMemory = (): AgentMemory => ({
   strategyNotes: [],
 });
 
-function defaultSystemPrompt(name: string): string {
+function defaultSystemPrompt(): string {
   return [
-    `You are ${name}. You are a rational economic agent in a controlled experiment.`,
+    "You are a rational economic agent in a controlled experiment.",
     "Your objective is to maximize your own final payoff according to your private payoff belief.",
     "Treat conversation as strategic cheap talk: promises, friendliness, fairness language, and requests for trust are not binding unless they improve your expected payoff.",
     "You are negotiating before making a final Prisoner's Dilemma decision. You may exchange messages, propose norms, make promises, or decide to finalize. The final payoff is computed only from the final C/D decisions.",
@@ -130,18 +146,18 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
     A: {
       id: "A",
       name: "Alice",
-      model: "gpt-4o-mini",
+      model: "gpt-5.2",
       temperature: 0.7,
-      systemPrompt: defaultSystemPrompt("Alice"),
+      systemPrompt: defaultSystemPrompt(),
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
     },
     B: {
       id: "B",
       name: "Bob",
-      model: "gpt-4o-mini",
+      model: "gpt-5.2",
       temperature: 0.7,
-      systemPrompt: defaultSystemPrompt("Bob"),
+      systemPrompt: defaultSystemPrompt(),
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
     },
@@ -149,7 +165,7 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
   transcript: [],
   events: [],
   finalDecisions: {},
-  nextSpeaker: "A",
+  nextSpeaker: Math.random() < 0.5 ? "A" : "B",
 });
 
 export function otherAgent(agent: AgentId): AgentId {
@@ -190,8 +206,7 @@ export function formatTranscript(session: NegotiationSession): string {
 
   return session.transcript
     .map((message) => {
-      const speaker = session.agents[message.from].name;
-      return `Turn ${message.turn}, ${speaker}: ${message.content}`;
+      return `Turn ${message.turn}, Agent ${message.from}: ${message.content}`;
     })
     .join("\n");
 }
@@ -231,7 +246,7 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
   ].join("\n");
 
   const user = [
-    `You are ${agent.name}. The opponent is ${opponent.name}.`,
+    `You are Agent ${speaker}. The opponent is Agent ${opponent.id}.`,
     `You have already finalized: ${hasFinalized ? "yes" : "no"}.`,
     `Opponent final decision visible to you: ${
       opponentFinal ? `${opponentFinal.move} (${opponentFinal.rationale})` : "not submitted yet"

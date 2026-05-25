@@ -19,6 +19,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -49,6 +50,7 @@ button.primary {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   min-width: 0;
