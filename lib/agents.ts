@@ -73,6 +73,8 @@ export interface NegotiationEvent {
   agent?: AgentId;
   content: string;
   raw?: string;
+  prompt?: unknown;
+  parsedAction?: unknown;
   createdAt: string;
   tokens?: {
     prompt?: number;

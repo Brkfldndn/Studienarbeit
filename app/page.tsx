@@ -17,10 +17,43 @@ const agentColor: Record<AgentId, string> = {
   B: "#fb7185",
 };
 
+interface ExperimentManifestView {
+  id: string;
+  name: string;
+  mode: "independent" | "sequence";
+  createdAt: string;
+  completedAt?: string;
+  status: "running" | "completed" | "error";
+  sequences: number;
+  episodesPerSequence: number;
+  persistMemory: boolean;
+  summary?: {
+    episodes: number;
+    outcomes: Record<string, number>;
+    cooperationA: number;
+    cooperationB: number;
+    averagePayoffA: number;
+    averagePayoffB: number;
+    totalTokens: number;
+  };
+  error?: string;
+}
+
 export default function Page() {
   const [session, setSession] = useState<NegotiationSession>(() => defaultNegotiationSession());
   const [running, setRunning] = useState(false);
+  const [experimentRunning, setExperimentRunning] = useState(false);
+  const [experimentName, setExperimentName] = useState("pilot-sequence");
+  const [experimentMode, setExperimentMode] = useState<"independent" | "sequence">("sequence");
+  const [sequenceCount, setSequenceCount] = useState(5);
+  const [episodesPerSequence, setEpisodesPerSequence] = useState(10);
+  const [persistMemory, setPersistMemory] = useState(true);
+  const [experiments, setExperiments] = useState<ExperimentManifestView[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void refreshExperiments();
+  }, []);
 
   const totals = useMemo(() => {
     return session.events.reduce(
@@ -96,6 +129,43 @@ export default function Page() {
     }
   }
 
+  async function refreshExperiments() {
+    try {
+      const res = await fetch("/api/experiments");
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Could not load experiments.");
+      setExperiments(data.experiments || []);
+    } catch (err: any) {
+      setError(err?.message ?? "Could not load experiments.");
+    }
+  }
+
+  async function runExperiment() {
+    setExperimentRunning(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/experiments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: experimentName,
+          mode: experimentMode,
+          sequences: sequenceCount,
+          episodesPerSequence,
+          persistMemory,
+          baseSession: session,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Experiment failed.");
+      await refreshExperiments();
+    } catch (err: any) {
+      setError(err?.message ?? "Experiment failed.");
+    } finally {
+      setExperimentRunning(false);
+    }
+  }
+
   function resetSession(keepConfig = true) {
     const fresh = defaultNegotiationSession();
     if (keepConfig) {
@@ -165,6 +235,9 @@ export default function Page() {
         <div className="controls">
           <button className="primary" onClick={autoRun} disabled={!canStep}>
             {running ? "Running..." : "Auto-run"}
+          </button>
+          <button onClick={runExperiment} disabled={running || experimentRunning}>
+            {experimentRunning ? "Experiment running..." : "Run experiment"}
           </button>
           <button onClick={stepOnce} disabled={!canStep}>
             Step one turn
@@ -314,6 +387,72 @@ export default function Page() {
             </div>
           </details>
 
+          <details className="config-panel">
+            <summary>
+              <span>Batch experiments</span>
+              <span className="muted">
+                {experimentMode === "sequence"
+                  ? `${sequenceCount} sequences x ${episodesPerSequence} episodes`
+                  : `${sequenceCount} independent runs`}
+              </span>
+            </summary>
+            <div className="config-content">
+              <div className="config-row">
+                <label className="wide-label">
+                  Name
+                  <input value={experimentName} onChange={(event) => setExperimentName(event.target.value)} />
+                </label>
+                <label>
+                  Mode
+                  <select
+                    value={experimentMode}
+                    onChange={(event) => setExperimentMode(event.target.value as "independent" | "sequence")}
+                  >
+                    <option value="sequence">Sequences</option>
+                    <option value="independent">Independent runs</option>
+                  </select>
+                </label>
+                <label>
+                  {experimentMode === "sequence" ? "Sequences" : "Runs"}
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={sequenceCount}
+                    onChange={(event) => setSequenceCount(parseInt(event.target.value || "1", 10))}
+                  />
+                </label>
+                <label>
+                  Episodes / sequence
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={episodesPerSequence}
+                    disabled={experimentMode === "independent"}
+                    onChange={(event) => setEpisodesPerSequence(parseInt(event.target.value || "1", 10))}
+                  />
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={persistMemory}
+                    disabled={experimentMode === "independent"}
+                    onChange={(event) => setPersistMemory(event.target.checked)}
+                  />
+                  Carry memory
+                </label>
+                <button className="primary" onClick={runExperiment} disabled={running || experimentRunning}>
+                  {experimentRunning ? "Running..." : "Run & save"}
+                </button>
+                <button onClick={refreshExperiments} disabled={experimentRunning}>
+                  Refresh
+                </button>
+              </div>
+              <ExperimentList experiments={experiments} />
+            </div>
+          </details>
+
           <Conversation session={session} running={running} />
         </section>
 
@@ -327,6 +466,46 @@ export default function Page() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function ExperimentList({ experiments }: { experiments: ExperimentManifestView[] }) {
+  if (!experiments.length) {
+    return <p className="muted">No saved experiments yet. Runs will appear here after they finish.</p>;
+  }
+
+  return (
+    <div className="experiment-list">
+      {experiments.slice(0, 6).map((experiment) => {
+        const summary = experiment.summary;
+        return (
+          <article className="experiment-item" key={experiment.id}>
+            <div>
+              <strong>{experiment.name}</strong>
+              <p className="muted">
+                {experiment.status} · {experiment.mode} · {summary?.episodes ?? experiment.sequences} episodes
+                {summary
+                  ? ` · CC ${summary.outcomes.CC || 0}, CD ${summary.outcomes.CD || 0}, DC ${summary.outcomes.DC || 0}, DD ${summary.outcomes.DD || 0}`
+                  : ""}
+              </p>
+              {summary && (
+                <p className="muted">
+                  coop A {(summary.cooperationA * 100).toFixed(0)}%, coop B {(summary.cooperationB * 100).toFixed(0)}% · avg payoff{" "}
+                  {summary.averagePayoffA.toFixed(2)}/{summary.averagePayoffB.toFixed(2)}
+                </p>
+              )}
+              {experiment.error && <p className="error-text">{experiment.error}</p>}
+            </div>
+            <div className="experiment-links">
+              <a href={`/api/experiments/${experiment.id}/file?file=summary.csv`}>summary</a>
+              <a href={`/api/experiments/${experiment.id}/file?file=episodes.jsonl`}>episodes</a>
+              <a href={`/api/experiments/${experiment.id}/file?file=messages.jsonl`}>messages</a>
+              <a href={`/api/experiments/${experiment.id}/file?file=model_calls.jsonl`}>calls</a>
+            </div>
+          </article>
+        );
+      })}
+    </div>
   );
 }
 
