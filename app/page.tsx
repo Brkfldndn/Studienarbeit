@@ -386,17 +386,6 @@ function AgentPanel({
             ))}
           </select>
         </label>
-        <label>
-          Temperature: {agent.temperature.toFixed(2)}
-          <input
-            type="range"
-            min={0}
-            max={2}
-            step={0.05}
-            value={agent.temperature}
-            onChange={(event) => updateAgent({ temperature: parseFloat(event.target.value) })}
-          />
-        </label>
       </div>
 
       <div className="panel-section">
@@ -472,7 +461,9 @@ function Conversation({ session, running }: { session: NegotiationSession; runni
 
         {session.transcript.length === 0 && (
           <div className="empty">
-            Start the run to let Agent A open the negotiation. Messages can continue until the cap or until both agents finalize.
+            {session.finalDecisions.A || session.finalDecisions.B
+              ? "Both agents finalized without sending public messages."
+              : `Start the run to let Agent ${session.nextSpeaker} open the negotiation. Messages can continue until the cap or until both agents finalize.`}
           </div>
         )}
       </div>

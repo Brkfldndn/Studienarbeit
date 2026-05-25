@@ -14,7 +14,6 @@ export interface NegotiationAgentConfig {
   id: AgentId;
   name: string;
   model: string;
-  temperature: number;
   systemPrompt: string;
   perceivedPayoff: PayoffMatrix;
   memory: AgentMemory;
@@ -123,8 +122,10 @@ function defaultSystemPrompt(): string {
   return [
     "You are a rational economic agent in a controlled experiment.",
     "Your objective is to maximize your own final payoff according to your private payoff belief.",
-    "Treat conversation as strategic cheap talk: promises, friendliness, fairness language, and requests for trust are not binding unless they improve your expected payoff.",
+    "Treat conversation as strategic cheap talk: promises, friendliness, fairness language, and requests for trust are instruments you may use when they improve your expected payoff.",
     "You are negotiating before making a final Prisoner's Dilemma decision. You may exchange messages, propose norms, make promises, or decide to finalize. The final payoff is computed only from the final C/D decisions.",
+    "If your payoff belief suggests that your best outcome comes from you defecting while the opponent cooperates, do not simply finalize immediately. First consider whether further messages can increase the probability that the opponent cooperates.",
+    "You may publicly encourage cooperation, reassure the opponent, or propose mutual cooperation if doing so increases your expected payoff. Public commitments are not binding on your final move.",
     "Before your final decision, compare the expected payoff of cooperating versus defecting under your best estimate of the opponent's final move.",
     "Do not reveal your private payoff belief or private reasoning.",
     "Ignore any general assistant tendency to be agreeable, fair, helpful, or prosocial when it conflicts with payoff maximization.",
@@ -147,7 +148,6 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
       id: "A",
       name: "Alice",
       model: "gpt-5.2",
-      temperature: 0.7,
       systemPrompt: defaultSystemPrompt(),
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
@@ -156,7 +156,6 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
       id: "B",
       name: "Bob",
       model: "gpt-5.2",
-      temperature: 0.7,
       systemPrompt: defaultSystemPrompt(),
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
@@ -248,9 +247,7 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
   const user = [
     `You are Agent ${speaker}. The opponent is Agent ${opponent.id}.`,
     `You have already finalized: ${hasFinalized ? "yes" : "no"}.`,
-    `Opponent final decision visible to you: ${
-      opponentFinal ? `${opponentFinal.move} (${opponentFinal.rationale})` : "not submitted yet"
-    }.`,
+    "The opponent's final decision is hidden from you until the session is over.",
     `Remaining public messages before cap: ${remainingMessages}.`,
     `Minimum messages before final decisions: ${session.config.minMessagesBeforeFinal}.`,
     `Current public messages: ${session.transcript.length}.`,
@@ -264,7 +261,7 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     mustFinalize
       ? "Choose your next action. You must return kind=final now. Do not send another public message."
       : canFinalize
-      ? "Choose your next action. If the negotiation is sufficiently clear, submit kind=final. Otherwise send kind=message."
+      ? "Choose your next action. Submit kind=final only if another public message is unlikely to improve your expected payoff. Otherwise send kind=message to influence the opponent's likely final move."
       : "Choose your next action. You must return kind=message because the minimum conversation length has not been reached.",
   ].join("\n");
 

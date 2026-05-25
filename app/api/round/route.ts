@@ -73,7 +73,6 @@ async function askAgent(params: {
 
   const resp = await client.chat.completions.create({
     model: agent.model,
-    temperature: agent.temperature,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: system },

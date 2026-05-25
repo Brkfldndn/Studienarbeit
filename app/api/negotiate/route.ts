@@ -14,16 +14,6 @@ import {
 
 export const runtime = "nodejs";
 
-function chatParamsForModel(model: string, temperature: number) {
-  const params: { model: string; temperature?: number } = { model };
-
-  if (!model.startsWith("gpt-5") && !model.startsWith("o")) {
-    params.temperature = temperature;
-  }
-
-  return params;
-}
-
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -64,7 +54,7 @@ export async function POST(req: NextRequest) {
     const forceFinal = shouldForceFinalDecision(session, speaker);
     const { messages } = buildAgentMessages(session, speaker);
     let completion = await client.chat.completions.create({
-      ...chatParamsForModel(speakerAgent.model, speakerAgent.temperature),
+      model: speakerAgent.model,
       response_format: { type: "json_object" },
       messages,
     });
@@ -82,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     if (forceFinal && action.kind === "message") {
       completion = await client.chat.completions.create({
-        ...chatParamsForModel(speakerAgent.model, Math.min(speakerAgent.temperature, 0.4)),
+        model: speakerAgent.model,
         response_format: { type: "json_object" },
         messages: [
           ...messages,

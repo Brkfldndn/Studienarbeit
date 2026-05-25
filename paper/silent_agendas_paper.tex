@@ -1,0 +1,277 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+\onehalfspacing
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{0pt}
+\setlist[itemize]{leftmargin=1.8em}
+\setlist[enumerate]{leftmargin=1.8em}
+
+\title{\textbf{Silent Agendas: Analyzing LLM Cooperation in the Prisoner's Dilemma under Asymmetric Information}}
+\author{Luca Jandke \\ Sascha Behrendt \\ Institute of Management Accounting and Simulation (MACCS) \\ Project Seminar, Topic 6}
+\date{Draft: May 25, 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Large language models are increasingly deployed not only as assistants, but as agents that negotiate, coordinate, and transact on behalf of human users. Recent marketplace experiments such as Anthropic's Project Deal show that AI agents can represent buyers and sellers, discover mutually beneficial trades, and complete transactions through natural-language bargaining. This raises a central question for economic AI systems: when LLM agents communicate with each other, does communication reliably support cooperation, or can it also conceal private incentives to exploit the counterpart? This paper develops the first half of an experimental study that investigates this question with an iterated Prisoner's Dilemma. The proposed experiment varies communication availability and payoff information structure in a 2$\times$2 factorial design. In the asymmetric condition, one agent receives a hidden defection bonus that changes its private incentives while the opponent continues to operate under the standard payoff matrix. The study measures cooperation rates, total payoff, and strategic alignment between stated intent and subsequent action. The draft motivates the experiment, situates it in the literature on repeated games and LLM agents, derives hypotheses, and specifies the experimental design.
+\end{abstract}
+
+\textbf{Keywords:} large language models, autonomous agents, Prisoner's Dilemma, asymmetric information, communication, market negotiation, AI alignment
+
+\newpage
+
+\section{Introduction}
+
+Autonomous LLM agents are beginning to move from conversational assistance into economic coordination. Instead of merely answering a user's question, an agent may search for products, negotiate terms, schedule services, compare offers, manage inventories, or transact with another agent. This shift matters because economic interaction is rarely a simple single-agent optimization problem. Markets depend on counterparties with different objectives, private information, and incentives to reveal, withhold, or distort information. If LLM agents become practical representatives in such settings, then their behavior in strategic interaction becomes an important object of study.
+
+Anthropic's Project Deal illustrates this development in a concrete way. In that experiment, Claude-based agents represented employees in an internal classified marketplace. The agents interviewed participants, listed goods, identified possible matches, negotiated in natural language, and reached agreements involving real items and real money \cite{anthropic_project_deal_2026}. The experiment suggests that agent-mediated markets are no longer only a theoretical possibility. At the same time, Anthropic reports that stronger models gained measurable market advantages and that agentic commerce raises concerns about information security, prompt injection, and unequal bargaining power \cite{anthropic_project_deal_2026}. Anthropic's earlier Project Vend similarly tested whether Claude could operate a small shop, including inventory management, pricing, supplier interaction, and customer communication \cite{anthropic_project_vend_2025}. Together, these projects show that LLM agents can be placed inside economic roles where they must repeatedly balance cooperation, persuasion, opportunism, and task performance.
+
+The present study asks a narrower but fundamental question within that broader transition: how does communication affect cooperation between LLM agents when one agent holds private payoff information? The setting is an iterated Prisoner's Dilemma. In the classical version of the game, two players repeatedly choose either cooperation or defection. Mutual cooperation is collectively better than mutual defection, but unilateral defection can yield a short-term advantage. Because the game captures the tension between individual incentives and joint welfare, it has long served as a basic model for trust, reciprocity, and strategic cooperation.
+
+The LLM-agent version of the game is especially interesting because language is both an input channel and a strategic instrument. If agents can send free-text messages before choosing their actions, they may use communication to coordinate on cooperation, reassure the counterpart, explain intentions, or build a history of reciprocity. However, communication can also become cheap talk. An agent with a hidden incentive to defect may communicate cooperatively while selecting a self-interested action. This possibility is directly relevant for agentic markets: an AI seller agent may promise fairness while optimizing price extraction; a buyer agent may signal interest while exploiting the seller's reservation price; a procurement agent may build trust while concealing budget constraints. In all of these examples, communication may increase efficiency, but it may also increase the opportunity for strategic misrepresentation.
+
+This paper develops the theoretical and methodological foundation for an experiment titled \emph{Silent Agendas}. The core design uses two LLM-based agents in a repeated Prisoner's Dilemma and varies two independent variables: communication availability and information structure. Communication is either absent or enabled through a short free-text chat round before each action. Information structure is either symmetric, where both agents receive the same payoff matrix, or asymmetric, where one agent privately receives an increased defection bonus hidden from the opponent. The main dependent variables are the cooperation rate, total payoff, and strategic alignment between communicated intent and actual action.
+
+The contribution of this draft is threefold. First, it connects laboratory-style LLM game experiments with the emerging practical problem of agentic commerce. Second, it isolates the role of private incentives in a controlled game-theoretic environment. Third, it proposes a transparent experimental design that can be executed through deterministic batch prompting and evaluated quantitatively as well as qualitatively. The remainder of this draft proceeds as follows. Section 2 discusses the theoretical background of cooperation in repeated games. Section 3 reviews why LLM agents require a modified interpretation of classical game-theoretic assumptions. Section 4 motivates the market-agent relevance. Section 5 derives research questions and hypotheses. Section 6 presents the experimental design.
+
+\section{Theoretical Background: Cooperation in Repeated Games}
+
+\subsection{The Prisoner's Dilemma as a Minimal Model of Strategic Tension}
+
+The Prisoner's Dilemma is a compact representation of a recurring social and economic problem: individually rational action can produce collectively inferior outcomes. Each player chooses between cooperation ($C$) and defection ($D$). Mutual cooperation produces a good outcome for both players. Mutual defection produces a worse outcome for both. If one player defects while the other cooperates, the defector receives the highest one-period payoff while the cooperator receives the lowest. A typical payoff ranking is therefore
+\[
+T > R > P > S,
+\]
+where $T$ is the temptation payoff from unilateral defection, $R$ is the reward for mutual cooperation, $P$ is the punishment for mutual defection, and $S$ is the sucker payoff from being exploited.
+
+In a one-shot game, defection is dominant under standard assumptions: regardless of the opponent's action, a player receives a higher payoff by defecting. Yet when the game is repeated, future consequences can sustain cooperation. Players may reward cooperative behavior, punish defection, and condition current choices on historical patterns. Axelrod's tournament results famously showed how simple reciprocal strategies such as Tit-for-Tat can perform well when agents interact repeatedly and can observe prior behavior \cite{axelrod1984evolution}. Repetition therefore transforms the game from a static decision problem into a dynamic trust problem.
+
+For LLM agents, this transformation is especially important. LLMs do not simply compute a fixed strategy table unless explicitly programmed to do so. They interpret instructions, infer norms, reason from textual history, and generate justifications. Their behavior in repeated games may therefore reflect a mixture of game-theoretic incentives, instruction-following, learned social norms, and prompt sensitivity. A repeated Prisoner's Dilemma is useful precisely because it is simple enough to control while still rich enough to reveal patterns of reciprocity, forgiveness, exploitation, and consistency.
+
+\subsection{Communication and Cheap Talk}
+
+Communication can change repeated-game behavior by allowing players to coordinate expectations. Before choosing an action, a player may promise cooperation, warn against defection, propose a strategy, apologize for prior behavior, or request mutual commitment. In human interaction, such messages can influence trust even when they are formally non-binding. They can establish a shared interpretation of the situation and reduce uncertainty about intentions.
+
+However, communication in a Prisoner's Dilemma is typically cheap talk if messages do not directly constrain actions. A player can say ``I will cooperate'' and then defect. The credibility of communication must therefore be earned through subsequent behavior. In repeated settings, dishonest communication can be punished later, but only if the harmed party detects the misalignment and has enough future interaction to make punishment meaningful.
+
+In LLM-agent interaction, cheap talk has an additional layer. Because LLMs are optimized to produce helpful, socially acceptable language, their messages may sound cooperative even when the selected action is strategically aggressive. This creates a possible gap between \emph{communicated intent} and \emph{revealed strategy}. The experiment therefore does not only ask whether chat increases cooperation; it also asks whether chat remains trustworthy when incentives are asymmetric.
+
+\subsection{Incomplete and Asymmetric Information}
+
+Classical repeated games often assume that players share common knowledge of the payoff structure. Real economic interaction rarely satisfies this assumption. Buyers may know their willingness to pay; sellers may know their costs; firms may know private inventory constraints; agents may know client priorities not visible to counterparties. Asymmetric information can change the strategic meaning of communication because one party may have both private knowledge and private incentives.
+
+In the proposed experiment, the asymmetric condition is implemented by giving one agent a hidden defection bonus. The informed agent knows that unilateral defection is more attractive than it appears to the uninformed agent. The uninformed agent continues to operate under the standard payoff matrix and therefore may interpret cooperative communication as evidence of aligned incentives. This structure creates a controlled ``silent agenda'': the informed agent can pursue a private payoff advantage while preserving a cooperative appearance.
+
+The asymmetry is intentionally simple. It avoids the complexity of full Bayesian type spaces while still capturing the central practical issue: one agent may privately face incentives that the other agent cannot observe. This is analogous to market settings in which one AI representative is instructed to maximize seller surplus, conceal a reservation price, or aggressively exploit a negotiation advantage, while the other agent only observes polite natural-language messages.
+
+\section{LLM Agents as Strategic Actors}
+
+\subsection{Why LLM Behavior Is Not Equivalent to Human Behavior}
+
+LLM agents should not be treated as direct replicas of human participants. They lack stable preferences in the human psychological sense and do not experience payoffs. Their choices are generated from model weights, system prompts, user prompts, conversational context, tool outputs, and sampling parameters. Nevertheless, when an LLM is placed inside an agent wrapper and instructed to maximize a payoff, its outputs can function as strategic actions. For experimental purposes, the relevant question is not whether the agent ``really wants'' a payoff, but whether its behavior systematically responds to incentives, messages, and history.
+
+Recent work on LLMs in Prisoner's Dilemma environments shows that models can display recognizable cooperation patterns. Fontana, Pierri, and Aiello find that LLMs often avoid initiating defection and can behave at least as cooperatively as human benchmarks, while also varying by model and opponent hostility \cite{fontana2024nicer}. Such findings suggest that LLM cooperation cannot be assumed to follow a single theoretical prediction. It must be measured under controlled conditions.
+
+There are at least four reasons for caution. First, model behavior is prompt-sensitive. Small changes in wording can alter whether the model interprets the task as a mathematical game, a moral scenario, or a role-playing exercise. Second, LLMs may display instruction hierarchy effects: a system instruction to maximize payoff may conflict with learned norms of honesty or helpfulness. Third, agents may reason verbally in ways that appear coherent but do not correspond to stable policies. Fourth, deterministic settings such as temperature zero improve reproducibility but do not eliminate prompt dependence or model-specific quirks.
+
+\subsection{Communication Between AI Agents}
+
+AI--AI communication differs from human communication because both sides may share similar training-induced conversational tendencies. Agents may overuse polite reassurance, mirror each other's cooperative framing, or produce generic strategic language. This can make apparent agreement easier to reach but harder to interpret. A transcript may show strong cooperative language even if the underlying actions are not cooperative.
+
+Large-scale work on AI negotiation reinforces the importance of language style. Vaccaro and colleagues report that, in autonomous negotiation competitions, warmth-related language features such as positivity, gratitude, and question asking were associated with deal formation and value creation, while more dominant strategies were linked with different bargaining outcomes \cite{vaccaro2026advancing}. These results suggest that communication style can materially affect AI-agent negotiation. For the present experiment, this implies that chat should not be treated as mere decoration; it is a strategic variable that may change both expectations and outcomes.
+
+However, negotiation success is not identical to cooperation. In bargaining, an agent can reach a deal while still capturing disproportionate value. In a Prisoner's Dilemma, an agent can verbally coordinate while privately choosing defection. The proposed design therefore focuses on \emph{strategic alignment}: whether the content of communication predicts the subsequent action. This measure is particularly relevant for auditing market agents, where users and regulators may inspect transcripts to infer whether agents behaved transparently.
+
+\section{Market-Agent Motivation}
+
+\subsection{From Laboratory Games to Agentic Commerce}
+
+The practical motivation for this experiment comes from the rise of agent-mediated markets. In Project Deal, Anthropic created an internal marketplace in which AI agents represented employees as buyers and sellers. According to Anthropic, 69 agents completed 186 deals across more than 500 listed items, with a total transaction value above \$4,000 \cite{anthropic_project_deal_2026}. The agents had to discover possible trades, propose prices, handle counteroffers, and reach agreement through natural language rather than a fixed negotiation protocol. This is a useful proof of concept because it moves beyond toy environments: the items were real, the humans had preferences, and the agent interactions had consequences outside the prompt.
+
+Project Deal also makes the strategic problem visible. Anthropic reports that stronger agents gained quantifiable market advantages and raises concerns that unequal access to high-quality agents could reinforce economic inequality \cite{anthropic_project_deal_2026}. This matters because market outcomes depend not only on whether agents can complete trades, but also on whether they bargain fairly, protect private information, and avoid manipulative tactics. A market with AI agents may reduce transaction costs, but it may also create new forms of hidden advantage.
+
+Project Vend adds a complementary perspective. In that experiment, Claude was asked to operate an automated shop over an extended period, with tasks including inventory selection, pricing, supplier communication, and customer interaction \cite{anthropic_project_vend_2025}. Anthropic describes the experiment as a way to understand how models perform continuous economic work over days or weeks rather than isolated one-shot tasks. This long-horizon framing is important for repeated games: cooperation is not only a single decision, but a pattern maintained across time.
+
+\subsection{Why Asymmetric Information Is Central in Markets}
+
+Market exchange is built around asymmetric information. Sellers often know more about product quality and costs. Buyers know more about their willingness to pay. Principals know their goals, but delegated agents may translate those goals into strategies the counterparty cannot inspect. If AI agents represent humans, asymmetry can arise at multiple levels: between the human principal and the agent, between two agents, and between the agent transcript and the true optimization objective.
+
+For example, a buyer's agent may privately know that the human buyer is willing to pay up to 100 euros, while telling a seller's agent that the budget is limited. A seller's agent may privately know that the owner wants to liquidate inventory quickly, while communicating confidence and scarcity. These are ordinary bargaining dynamics, but LLM agents change their scale and opacity. Natural-language negotiation can be automated, personalized, and executed across many counterparties. The more agents negotiate on behalf of humans, the more important it becomes to know whether communication supports trustworthy cooperation or merely gives agents a richer channel for strategic impression management.
+
+The proposed Prisoner's Dilemma experiment abstracts from price bargaining and product heterogeneity. This abstraction is deliberate. By reducing the interaction to cooperation and defection, the study isolates whether a hidden payoff change is enough to weaken the cooperation-promoting effect of communication. If even a simple hidden bonus causes agents to communicate cooperatively while defecting more often, then agentic markets may require stronger monitoring and protocol design than transcript review alone.
+
+\section{Research Question and Hypotheses}
+
+The central research question is:
+
+\begin{quote}
+\textbf{RQ:} How does communication affect cooperation between LLM agents in an iterated Prisoner's Dilemma when one agent possesses private payoff information that increases the incentive to defect?
+\end{quote}
+
+The question can be decomposed into three parts. First, does communication increase cooperation under symmetric information? Second, does hidden asymmetric incentive information reduce cooperation? Third, does communication remain strategically aligned under asymmetry, or does it create a gap between cooperative language and defection behavior?
+
+\subsection{Hypothesis 1: Communication Increases Cooperation under Symmetric Information}
+
+Under symmetric information, both agents know the same payoff matrix and face the same strategic tension. Communication should help them coordinate on mutual cooperation by making intentions explicit, establishing expectations, and reducing ambiguity about the opponent's strategy. Because LLMs are responsive to natural-language framing, a chat round may amplify cooperative norms and encourage reciprocal commitment.
+
+\begin{quote}
+\textbf{H1:} In the symmetric payoff condition, agents with a free-text chat round will choose cooperation more often than agents without chat.
+\end{quote}
+
+\subsection{Hypothesis 2: Asymmetric Defection Incentives Reduce Cooperation}
+
+When one agent receives a hidden defection bonus, unilateral defection becomes privately more attractive. Even if the informed agent can still benefit from long-term mutual cooperation, the temptation payoff increases. The informed agent may therefore defect more often, especially when the opponent has established a cooperative pattern.
+
+\begin{quote}
+\textbf{H2:} Introducing a hidden defection bonus for one agent will reduce the overall cooperation rate relative to the symmetric payoff condition.
+\end{quote}
+
+\subsection{Hypothesis 3: Communication Has a Weaker Cooperation Effect under Asymmetry}
+
+Communication may be less effective when incentives are hidden. The uninformed agent may interpret cooperative messages as credible, while the informed agent privately recognizes a stronger incentive to defect. The result may be an interaction in which communication continues to produce cooperative language but no longer produces equally cooperative action.
+
+\begin{quote}
+\textbf{H3:} The positive effect of communication on cooperation will be weaker under asymmetric information than under symmetric information.
+\end{quote}
+
+\subsection{Hypothesis 4: Asymmetry Reduces Strategic Alignment}
+
+The most distinctive outcome of the experiment is not only whether agents cooperate, but whether their messages align with their actions. Under symmetric information, a cooperative message should more often be followed by cooperation. Under asymmetry, the informed agent has a greater incentive to maintain cooperative expectations while choosing defection.
+
+\begin{quote}
+\textbf{H4:} In the asymmetric communication condition, the informed agent will show lower strategic alignment between communicated intent and action than agents in the symmetric communication condition.
+\end{quote}
+
+\section{Design of the Experiment}
+
+\subsection{Overview}
+
+The experiment uses a 2$\times$2 factorial design. The first factor is communication availability: either no communication or a free-text chat round before each action. The second factor is information structure: either symmetric payoff information or asymmetric payoff information with a hidden defection bonus for one agent. The design produces four experimental groups:
+
+\begin{enumerate}
+  \item \textbf{Baseline:} symmetric information, no communication.
+  \item \textbf{Standard Communication:} symmetric information, with chat.
+  \item \textbf{Silent Agenda:} asymmetric information, no communication.
+  \item \textbf{Hidden Conflict:} asymmetric information, with chat.
+\end{enumerate}
+
+This structure allows the experiment to estimate the main effect of communication, the main effect of asymmetric information, and the interaction between the two. The interaction is theoretically central. If communication increases cooperation equally in both information structures, then chat may be robust to hidden incentives. If communication increases cooperation only under symmetry, then the cooperation-promoting effect of language depends on aligned incentives. If communication under asymmetry produces cooperative messages without cooperative actions, then transcript-level trust may be misleading.
+
+\subsection{Players, Roles, and Prompting}
+
+Each trial uses two LLM-based agents, Agent A and Agent B. Agent A is the informed agent in the asymmetric conditions. Agent B always receives the standard game description. In symmetric conditions, both agents receive identical payoff information. In asymmetric conditions, Agent A receives an additional private instruction stating that defection yields an increased bonus when Agent B cooperates. Agent B is not informed that Agent A has received this modified payoff structure.
+
+The agents receive the game rules, the payoff matrix, their role assignment, and the history of previous rounds through the system or batch prompt. The action space is restricted to two valid outputs: $C$ for cooperation and $D$ for defection. In communication conditions, each round contains a short chat phase before the final action selection. The chat phase is free text, but the action phase must return a parsable action token. This separation is important because it allows the experiment to compare what the agent says with what it does.
+
+Temperature is fixed at 0. The goal is not to sample the full behavioral distribution of a model, but to create deterministic and reproducible conditions for a seminar-scale experiment. If time permits, robustness checks can later vary model type, prompt wording, or random seeds where supported. The first version of the experiment should keep the model constant across both agents and all experimental groups.
+
+\subsection{Payoff Structure}
+
+The symmetric payoff matrix follows the standard Prisoner's Dilemma ranking. A possible implementation is shown in Table \ref{tab:payoff}. The exact numeric values can be adjusted, but the ordinal structure must satisfy $T > R > P > S$.
+
+\begin{table}[h!]
+\centering
+\caption{Illustrative symmetric payoff matrix. Entries are ordered as (Agent A payoff, Agent B payoff).}
+\label{tab:payoff}
+\begin{tabular}{lll}
+\toprule
+ & \textbf{Agent B: C} & \textbf{Agent B: D} \\
+\midrule
+\textbf{Agent A: C} & $(3,3)$ & $(0,5)$ \\
+\textbf{Agent A: D} & $(5,0)$ & $(1,1)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+In the asymmetric condition, Agent A privately receives an increased temptation payoff when choosing $D$ while Agent B chooses $C$. For example, Agent A's payoff in the $(D,C)$ cell may increase from 5 to 7. Agent B's perceived payoff matrix remains unchanged. This hidden modification creates a private incentive shift without changing the visible game for the uninformed agent.
+
+\subsection{Variables}
+
+\begin{longtable}{p{0.20\textwidth} p{0.25\textwidth} p{0.45\textwidth}}
+\caption{Experimental variables and operationalization.}
+\label{tab:variables}\\
+\toprule
+\textbf{Category} & \textbf{Variable} & \textbf{Setting / Operationalization} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Category} & \textbf{Variable} & \textbf{Setting / Operationalization} \\
+\midrule
+\endhead
+Independent & Communication & No chat vs. free-text chat round before action selection. \\
+Independent & Information structure & Symmetric payoff matrix vs. asymmetric hidden defection bonus for Agent A. \\
+Dependent & Cooperation rate & Percentage of rounds in which an agent selects $C$. Computed by agent, trial, and condition. \\
+Dependent & Strategic alignment & Agreement between communicated intent and action, especially promises or signals of cooperation followed by $C$ or $D$. \\
+Dependent & Total payoff & Accumulated payoff per agent and joint payoff per trial. \\
+Control & LLM model & Same model for both agents and all conditions. Final model to be selected before execution. \\
+Control & Temperature & 0, to support deterministic reproducibility. \\
+Control & Round count & Fixed number of iterations per trial. The initial implementation should use a constant $X$ across all conditions. \\
+Control & Role assignment & Agent A is informed in asymmetric conditions; Agent B receives the standard payoff matrix. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Procedure}
+
+Each trial proceeds in repeated rounds. At the beginning of the trial, both agents receive their role, objective, payoff information, and formatting constraints. In each round, the agents receive the current round number and the history of previous actions and payoffs. In no-chat conditions, each agent immediately selects $C$ or $D$. In chat conditions, the agents first exchange a short free-text message and then independently select $C$ or $D$.
+
+The batch workflow records all prompts, chat messages, actions, payoffs, and parsing outcomes. If an agent produces an invalid action token, the system should apply a predefined repair rule, such as asking the agent once to return only $C$ or $D$. Invalid outputs should be logged rather than silently corrected, because failures to follow the action format may indicate prompt ambiguity or model instability.
+
+The basic unit of analysis is the round-level action, nested within trials and conditions. The first analysis will compare cooperation rates across the four experimental groups. The second analysis will examine Agent A and Agent B separately, because the asymmetric condition affects only Agent A's private incentives. The third analysis will code communication content in the chat conditions and measure whether cooperative statements predict cooperative actions.
+
+\subsection{Strategic Alignment Coding}
+
+Strategic alignment requires translating chat content into a small set of intent categories. A simple first-pass coding scheme can classify each pre-action message as cooperative, defect-oriented, ambiguous, or non-strategic. A cooperative message includes explicit promises to cooperate, proposals for mutual cooperation, or reassurance that the agent will choose $C$. A defect-oriented message includes threats, explicit plans to defect, or statements prioritizing unilateral payoff. Ambiguous messages discuss the game without clear intent. Non-strategic messages do not contain relevant strategic content.
+
+The alignment score can then be computed as follows. A cooperative message followed by $C$ is aligned; a cooperative message followed by $D$ is misaligned. A defect-oriented message followed by $D$ is aligned; a defect-oriented message followed by $C$ is misaligned. Ambiguous and non-strategic messages can either be excluded from the main alignment score or analyzed separately. For a seminar-scale implementation, it is sufficient to combine rule-based keyword coding with manual validation of a sample of transcripts. A later version could use an independent LLM judge, but that would introduce another model-dependent layer and should be documented carefully.
+
+\subsection{Expected Patterns}
+
+The expected pattern is shown conceptually in Table \ref{tab:expected}. The baseline condition provides the cooperation rate without communication. Standard Communication should increase cooperation if chat supports coordination. Silent Agenda should reduce cooperation by increasing Agent A's hidden incentive to defect. Hidden Conflict is the most important condition: if communication remains robust, cooperation should recover despite asymmetry; if communication becomes cheap talk, the transcripts may look cooperative while actions reveal more defection.
+
+\begin{table}[h!]
+\centering
+\caption{Expected qualitative pattern by condition.}
+\label{tab:expected}
+\begin{tabular}{p{0.26\textwidth} p{0.28\textwidth} p{0.36\textwidth}}
+\toprule
+\textbf{Condition} & \textbf{Expected cooperation} & \textbf{Interpretive focus} \\
+\midrule
+Baseline & Moderate & Reveals default repeated-game behavior without language coordination. \\
+Standard Communication & Higher & Tests whether chat increases trust and reciprocal cooperation. \\
+Silent Agenda & Lower, especially for Agent A & Tests whether hidden incentives change action patterns. \\
+Hidden Conflict & Ambiguous or unstable & Tests whether cooperative language remains action-aligned under hidden incentives. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Scope of This Draft}
+
+This draft intentionally stops at the design stage. The remaining parts of the full paper should be written after the experiment is executed: results, robustness checks, discussion, limitations, and implications for market-agent governance. The empirical sections should report cooperation rates, payoff distributions, action-transition patterns, representative transcript excerpts, and alignment scores. The final discussion should return to the market motivation: whether natural-language communication between agents is a reliable trust signal, or whether agentic markets require explicit protocols, monitoring, and incentive transparency.
+
+\newpage
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

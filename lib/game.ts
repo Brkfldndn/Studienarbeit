@@ -18,7 +18,6 @@ export const DEFAULT_PAYOFF: PayoffMatrix = {
 export interface AgentConfig {
   name: string;
   role: string; // role/system description
-  temperature: number;
   model: string;
 }
 
