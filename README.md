@@ -42,8 +42,3 @@ npm run dev
 
 The runtime owns turn order, caps, validation, final scoring, and the event log. The agents own only their private prompts, private information, memory, and next action.
 
-## Paper
-The accompanying write-up is in [paper/silent_agendas_paper.tex](paper/silent_agendas_paper.tex) (compiled PDF: [paper/silent_agendas_paper.pdf](paper/silent_agendas_paper.pdf)).
-
-## Stack
-Next.js 14 · React 18 · TypeScript · OpenAI SDK · deployed on Vercel.
