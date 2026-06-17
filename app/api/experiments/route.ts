@@ -36,6 +36,17 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  if (process.env.VERCEL) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Batch experiments cannot run inside a single Vercel request. Use the live app for one negotiation at a time, or run batches locally / in a background worker.",
+      },
+      { status: 400 }
+    );
+  }
+
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json({ ok: false, error: "OPENAI_API_KEY is not configured." }, { status: 500 });
   }

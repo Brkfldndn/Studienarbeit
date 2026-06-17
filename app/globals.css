@@ -356,6 +356,15 @@ label {
   font-size: 12px;
 }
 
+.warning-text {
+  border: 1px solid #6b4f16;
+  border-radius: 7px;
+  background: #1f1a0b;
+  color: #facc15;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
 .payoff-section {
   display: grid;
   gap: 8px;

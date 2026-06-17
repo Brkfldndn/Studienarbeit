@@ -79,9 +79,14 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [utilityDelta, setUtilityDelta] = useState(0);
   const [advantagedAgent, setAdvantagedAgent] = useState<AdvantagedAgent>("A");
+  const [isHostedDeployment, setIsHostedDeployment] = useState(false);
 
   useEffect(() => {
     void refreshExperiments();
+    setIsHostedDeployment(
+      window.location.hostname.endsWith(".vercel.app") ||
+        (!["localhost", "127.0.0.1"].includes(window.location.hostname) && !window.location.hostname.endsWith(".local"))
+    );
   }, []);
 
   const totals = useMemo(() => {
@@ -306,13 +311,10 @@ export default function Page() {
         <h1>LLM Negotiation Lab</h1>
         <div className="controls">
           <button className="primary" onClick={autoRun} disabled={!canStep}>
-            {running ? "Running..." : "Auto-run"}
-          </button>
-          <button onClick={runExperiment} disabled={running || experimentRunning}>
-            {experimentRunning ? "Experiment running..." : "Run experiment"}
+            {running ? "Running negotiation..." : "Run one negotiation"}
           </button>
           <button onClick={stepOnce} disabled={!canStep}>
-            Step one turn
+            Step one agent
           </button>
           <button onClick={() => resetSession(true)} disabled={running}>
             Reset run
@@ -525,12 +527,20 @@ export default function Page() {
             <summary>
               <span>Batch experiments</span>
               <span className="muted">
-                {experimentMode === "sequence"
-                  ? `${sequenceCount} sequences x ${episodesPerSequence} episodes`
-                  : `${sequenceCount} independent runs`}
+                {isHostedDeployment
+                  ? "local/background worker required"
+                  : experimentMode === "sequence"
+                    ? `${sequenceCount} sequences x ${episodesPerSequence} episodes`
+                    : `${sequenceCount} independent runs`}
               </span>
             </summary>
             <div className="config-content">
+              {isHostedDeployment && (
+                <p className="warning-text">
+                  Batch experiments run many model calls and will time out on Vercel. Use Run one negotiation here; run saved
+                  batches locally or move them to a background job/database worker.
+                </p>
+              )}
               <div className="config-row">
                 <label className="wide-label">
                   Name
@@ -576,7 +586,7 @@ export default function Page() {
                   />
                   Carry memory
                 </label>
-                <button className="primary" onClick={runExperiment} disabled={running || experimentRunning}>
+                <button className="primary" onClick={runExperiment} disabled={running || experimentRunning || isHostedDeployment}>
                   {experimentRunning ? "Running..." : "Run & save"}
                 </button>
                 <button onClick={refreshExperiments} disabled={experimentRunning}>

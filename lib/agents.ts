@@ -26,20 +26,22 @@ export interface AgentMemory {
   strategyNotes: string[];
 }
 
+export const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
+
 export const OPENAI_MODEL_OPTIONS = [
+  { value: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+  { value: "gpt-4o-mini", label: "GPT-4o mini" },
+  { value: "gpt-4.1-nano", label: "GPT-4.1 nano" },
+  { value: "o4-mini", label: "o4-mini" },
   { value: "gpt-5.2", label: "GPT-5.2" },
   { value: "gpt-5.2-chat-latest", label: "GPT-5.2 Chat" },
   { value: "gpt-5.1", label: "GPT-5.1" },
   { value: "gpt-5", label: "GPT-5" },
   { value: "gpt-5-mini", label: "GPT-5 mini" },
   { value: "gpt-5-nano", label: "GPT-5 nano" },
-  { value: "gpt-4o-mini", label: "GPT-4o mini" },
   { value: "gpt-4o", label: "GPT-4o" },
-  { value: "gpt-4.1-nano", label: "GPT-4.1 nano" },
-  { value: "gpt-4.1-mini", label: "GPT-4.1 mini" },
   { value: "gpt-4.1", label: "GPT-4.1" },
   { value: "o3", label: "o3" },
-  { value: "o4-mini", label: "o4-mini" },
 ] as const;
 
 export interface NegotiationConfig {
@@ -150,7 +152,7 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
     A: {
       id: "A",
       name: "Alice",
-      model: "gpt-5.2",
+      model: DEFAULT_OPENAI_MODEL,
       systemPrompt: defaultSystemPrompt(),
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
@@ -158,7 +160,7 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
     B: {
       id: "B",
       name: "Bob",
-      model: "gpt-5.2",
+      model: DEFAULT_OPENAI_MODEL,
       systemPrompt: defaultSystemPrompt(),
       perceivedPayoff: DEFAULT_PAYOFF,
       memory: emptyMemory(),
