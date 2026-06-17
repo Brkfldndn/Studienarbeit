@@ -14,6 +14,7 @@ import {
 import { runNegotiationStep } from "@/lib/server-negotiation";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type ExperimentMode = "independent" | "sequence";
 
@@ -27,7 +28,11 @@ interface ExperimentRequest {
 }
 
 export async function GET() {
-  return NextResponse.json({ ok: true, experiments: await listExperiments() });
+  try {
+    return NextResponse.json({ ok: true, experiments: await listExperiments() });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err?.message || "Could not load experiments." }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {

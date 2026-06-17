@@ -361,6 +361,54 @@ label {
   gap: 8px;
 }
 
+.utility-model {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #1c2636;
+  padding-top: 10px;
+}
+
+.preset-row,
+.diagnostics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  border: 1px solid #334155;
+  border-radius: 999px;
+  background: #111827;
+  color: #cbd5e1;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chip.good {
+  border-color: #1f6a40;
+  background: #0f2f22;
+  color: #86efac;
+}
+
+.chip.bad {
+  border-color: #7f1d1d;
+  background: #2a1218;
+  color: #fecdd3;
+}
+
+.advanced-matrix {
+  border-top: 1px solid #1c2636;
+  padding-top: 8px;
+}
+
+.advanced-matrix summary {
+  cursor: pointer;
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .payoff-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

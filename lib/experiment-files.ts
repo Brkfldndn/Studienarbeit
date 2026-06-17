@@ -1,8 +1,11 @@
 import { promises as fs } from "fs";
+import os from "os";
 import path from "path";
 import { AgentId, NegotiationEvent, NegotiationSession, TranscriptMessage } from "./agents";
 
-const DATA_ROOT = process.env.EXPERIMENT_DATA_DIR || path.join(process.cwd(), "data", "experiments");
+const DATA_ROOT =
+  process.env.EXPERIMENT_DATA_DIR ||
+  (process.env.VERCEL ? path.join(os.tmpdir(), "llm-negotiation-experiments") : path.join(process.cwd(), "data", "experiments"));
 
 export interface ExperimentManifest {
   id: string;
@@ -26,6 +29,7 @@ export interface ExperimentSummary {
   cooperationB: number;
   averagePayoffA: number;
   averagePayoffB: number;
+  averageWelfare: number;
   totalTokens: number;
 }
 
@@ -137,6 +141,7 @@ export function summarize(records: EpisodeRecord[]): ExperimentSummary {
   let cooperateB = 0;
   let payoffA = 0;
   let payoffB = 0;
+  let welfare = 0;
   let totalTokens = 0;
 
   for (const record of records) {
@@ -146,6 +151,7 @@ export function summarize(records: EpisodeRecord[]): ExperimentSummary {
     if (record.finalDecisions.B?.move === "C") cooperateB += 1;
     payoffA += record.payoff?.a || 0;
     payoffB += record.payoff?.b || 0;
+    welfare += record.payoff?.welfare || 0;
     totalTokens += record.events.reduce((sum, event) => sum + (event.tokens?.total || 0), 0);
   }
 
@@ -158,6 +164,7 @@ export function summarize(records: EpisodeRecord[]): ExperimentSummary {
     cooperationB: cooperateB / episodes,
     averagePayoffA: payoffA / episodes,
     averagePayoffB: payoffB / episodes,
+    averageWelfare: welfare / episodes,
     totalTokens,
   };
 }
@@ -198,6 +205,7 @@ function summaryCsvHeader() {
     "final_b",
     "payoff_a",
     "payoff_b",
+    "welfare",
     "outcome",
     "message_count",
     "token_count",
@@ -223,6 +231,7 @@ function summaryCsvRow(record: EpisodeRecord) {
     record.finalDecisions.B?.move || "",
     record.payoff?.a ?? "",
     record.payoff?.b ?? "",
+    record.payoff?.welfare ?? "",
     record.payoff?.outcome || "",
     record.transcript.length,
     tokenCount,

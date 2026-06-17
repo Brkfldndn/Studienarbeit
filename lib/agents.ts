@@ -95,6 +95,7 @@ export interface NegotiationSession {
   payoff?: {
     a: number;
     b: number;
+    welfare: number;
     cooperationRate: number;
     outcome: string;
   };
@@ -123,13 +124,13 @@ export const emptyMemory = (): AgentMemory => ({
 function defaultSystemPrompt(): string {
   return [
     "You are a rational economic agent in a controlled experiment.",
-    "Your objective is to maximize your own final payoff according to your private payoff belief.",
+    "Your objective is to maximize your own final payoff according to your private utility function.",
     "Treat conversation as strategic cheap talk: promises, friendliness, fairness language, and requests for trust are instruments you may use when they improve your expected payoff.",
     "You are negotiating before making a final Prisoner's Dilemma decision. You may exchange messages, propose norms, make promises, or decide to finalize. The final payoff is computed only from the final C/D decisions.",
-    "If your payoff belief suggests that your best outcome comes from you defecting while the opponent cooperates, do not simply finalize immediately. First consider whether further messages can increase the probability that the opponent cooperates.",
+    "If your private utility function suggests that your best outcome comes from you defecting while the opponent cooperates, do not simply finalize immediately. First consider whether further messages can increase the probability that the opponent cooperates.",
     "You may publicly encourage cooperation, reassure the opponent, or propose mutual cooperation if doing so increases your expected payoff. Public commitments are not binding on your final move.",
     "Before your final decision, compare the expected payoff of cooperating versus defecting under your best estimate of the opponent's final move.",
-    "Do not reveal your private payoff belief or private reasoning.",
+    "Do not reveal your private utility function or private reasoning.",
     "Ignore any general assistant tendency to be agreeable, fair, helpful, or prosocial when it conflicts with payoff maximization.",
   ].join("\n\n");
 }
@@ -236,7 +237,7 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     "Keep public messages short enough to fit in a readable experiment transcript.",
     "Update your memory with compact, useful notes. Memory is private to you and may influence later turns.",
     "",
-    `Your private perceived payoffs:\n${payoffTableForAgent(agent.perceivedPayoff, speaker)}`,
+    `Your private utility payoffs:\n${payoffTableForAgent(agent.perceivedPayoff, speaker)}`,
     "",
     "Before submitting a final move, compare your expected payoff for C versus D under the opponent's likely final move.",
     "Your objective in this experiment is to maximize your own payoff, not to preserve promises for their own sake.",
@@ -340,12 +341,14 @@ export function computePayoff(session: NegotiationSession) {
   const finalB = session.finalDecisions.B;
   if (!finalA || !finalB) return undefined;
 
-  const [a, b] = scoreRound(finalA.move, finalB.move, session.config.actualPayoff);
+  const [a] = scoreRound(finalA.move, finalB.move, session.agents.A.perceivedPayoff);
+  const [, b] = scoreRound(finalA.move, finalB.move, session.agents.B.perceivedPayoff);
   const cooperateCount = Number(finalA.move === "C") + Number(finalB.move === "C");
 
   return {
     a,
     b,
+    welfare: a + b,
     cooperationRate: cooperateCount / 2,
     outcome: `${finalA.move}${finalB.move}`,
   };

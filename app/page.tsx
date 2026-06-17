@@ -10,7 +10,13 @@ import {
   NegotiationSession,
   OPENAI_MODEL_OPTIONS,
 } from "@/lib/agents";
-import { DEFAULT_PAYOFF, Move, PayoffMatrix } from "@/lib/game";
+import {
+  AdvantagedAgent,
+  marketPayoffMatrix,
+  Move,
+  payoffDiagnostics,
+  PayoffMatrix,
+} from "@/lib/game";
 
 const agentColor: Record<AgentId, string> = {
   A: "#60a5fa",
@@ -34,9 +40,30 @@ interface ExperimentManifestView {
     cooperationB: number;
     averagePayoffA: number;
     averagePayoffB: number;
+    averageWelfare: number;
     totalTokens: number;
   };
   error?: string;
+}
+
+async function readJsonResponse<T>(res: Response, fallbackMessage: string): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error(`${fallbackMessage} Empty response from ${res.url || "server"} (${res.status}).`);
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`${fallbackMessage} Server returned non-JSON response (${res.status}).`);
+  }
+
+  if (!res.ok || data?.ok === false) {
+    throw new Error(data?.error || `${fallbackMessage} HTTP ${res.status}.`);
+  }
+
+  return data as T;
 }
 
 export default function Page() {
@@ -50,6 +77,8 @@ export default function Page() {
   const [persistMemory, setPersistMemory] = useState(true);
   const [experiments, setExperiments] = useState<ExperimentManifestView[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [utilityDelta, setUtilityDelta] = useState(0);
+  const [advantagedAgent, setAdvantagedAgent] = useState<AdvantagedAgent>("A");
 
   useEffect(() => {
     void refreshExperiments();
@@ -72,10 +101,15 @@ export default function Page() {
     session.transcript.length < session.config.maxMessages &&
     !(session.finalDecisions.A && session.finalDecisions.B);
   const finishReason = session.payoff
-    ? `Finished because both agents finalized. Outcome ${session.payoff.outcome}, payoff ${session.payoff.a}/${session.payoff.b}.`
+    ? `Finished because both agents finalized. Outcome ${session.payoff.outcome}, utility ${session.payoff.a}/${session.payoff.b}, welfare ${session.payoff.welfare}.`
     : session.status === "finished"
       ? "Finished because the message cap was reached before both agents finalized."
       : null;
+  const proposedUtilityMatrix = useMemo(
+    () => marketPayoffMatrix(utilityDelta, advantagedAgent),
+    [utilityDelta, advantagedAgent]
+  );
+  const utilityDiagnostics = useMemo(() => payoffDiagnostics(proposedUtilityMatrix), [proposedUtilityMatrix]);
 
   async function requestStep(input: NegotiationSession) {
     const res = await fetch("/api/negotiate", {
@@ -83,8 +117,7 @@ export default function Page() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ session: ensureStarted(input) }),
     });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "Negotiation step failed.");
+    const data = await readJsonResponse<{ ok: true; session: NegotiationSession }>(res, "Negotiation step failed.");
     return data.session as NegotiationSession;
   }
 
@@ -132,8 +165,10 @@ export default function Page() {
   async function refreshExperiments() {
     try {
       const res = await fetch("/api/experiments");
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Could not load experiments.");
+      const data = await readJsonResponse<{ ok: true; experiments: ExperimentManifestView[] }>(
+        res,
+        "Could not load experiments."
+      );
       setExperiments(data.experiments || []);
     } catch (err: any) {
       setError(err?.message ?? "Could not load experiments.");
@@ -156,8 +191,7 @@ export default function Page() {
           baseSession: session,
         }),
       });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Experiment failed.");
+      await readJsonResponse<{ ok: true }>(res, "Experiment failed.");
       await refreshExperiments();
     } catch (err: any) {
       setError(err?.message ?? "Experiment failed.");
@@ -194,17 +228,55 @@ export default function Page() {
     setSession((current) => {
       const cell = current.config.actualPayoff[key];
       const nextCell: [number, number] = index === 0 ? [value, cell[1]] : [cell[0], value];
+      const nextPayoff = {
+        ...current.config.actualPayoff,
+        [key]: nextCell,
+      };
       return {
         ...current,
         config: {
           ...current.config,
-          actualPayoff: {
-            ...current.config.actualPayoff,
-            [key]: nextCell,
+          actualPayoff: nextPayoff,
+        },
+        agents: {
+          A: {
+            ...current.agents.A,
+            perceivedPayoff: nextPayoff,
+          },
+          B: {
+            ...current.agents.B,
+            perceivedPayoff: nextPayoff,
           },
         },
       };
     });
+  }
+
+  function applyUtilityModel(delta = utilityDelta, advantaged = advantagedAgent) {
+    const matrix = marketPayoffMatrix(delta, advantaged);
+    setSession((current) => ({
+      ...current,
+      config: {
+        ...current.config,
+        actualPayoff: matrix,
+      },
+      agents: {
+        A: {
+          ...current.agents.A,
+          perceivedPayoff: matrix,
+        },
+        B: {
+          ...current.agents.B,
+          perceivedPayoff: matrix,
+        },
+      },
+    }));
+  }
+
+  function applyPreset(delta: number, advantaged: AdvantagedAgent) {
+    setUtilityDelta(delta);
+    setAdvantagedAgent(advantaged);
+    applyUtilityModel(delta, advantaged);
   }
 
   function updateAgentPayoff(agent: AgentId, key: keyof PayoffMatrix, index: 0 | 1, value: number) {
@@ -273,7 +345,11 @@ export default function Page() {
             <Metric label="Tokens" value={String(totals.total)} />
             <Metric
               label="Outcome"
-              value={session.payoff ? `${session.payoff.outcome} (${session.payoff.a}/${session.payoff.b})` : "pending"}
+              value={
+                session.payoff
+                  ? `${session.payoff.outcome} (${session.payoff.a}/${session.payoff.b}, W ${session.payoff.welfare})`
+                  : "pending"
+              }
             />
           </div>
 
@@ -365,24 +441,82 @@ export default function Page() {
                     }
                   />
                 </label>
-                <button
-                  onClick={() =>
-                    setSession((current) => ({
-                      ...current,
-                      config: { ...current.config, actualPayoff: DEFAULT_PAYOFF },
-                    }))
-                  }
-                  disabled={running}
-                >
-                  Reset payoff
-                </button>
               </div>
-              <div className="payoff-section">
-                <div>
-                  <h3>Actual payoff</h3>
-                  <p className="muted">Environment truth used for scoring.</p>
+              <div className="utility-model">
+                <div className="row-between">
+                  <div>
+                    <h3>Marketplace utility model</h3>
+                    <p className="muted">
+                      Cooperation creates welfare. Asymmetry changes who captures exploitation surplus, not total surplus.
+                    </p>
+                  </div>
+                  <button onClick={() => applyPreset(0, "A")} disabled={running}>
+                    Symmetric
+                  </button>
                 </div>
-                <PayoffEditor payoff={session.config.actualPayoff} updatePayoff={updateActualPayoff} disabled={running} />
+                <div className="preset-row">
+                  <button onClick={() => applyPreset(2, "A")} disabled={running}>
+                    Low Δ, A advantaged
+                  </button>
+                  <button onClick={() => applyPreset(6, "A")} disabled={running}>
+                    Main Δ, A advantaged
+                  </button>
+                  <button onClick={() => applyPreset(2, "B")} disabled={running}>
+                    Low Δ, B advantaged
+                  </button>
+                  <button onClick={() => applyPreset(6, "B")} disabled={running}>
+                    Main Δ, B advantaged
+                  </button>
+                </div>
+                <div className="config-row">
+                  <label>
+                    Advantaged side
+                    <select
+                      value={advantagedAgent}
+                      disabled={running || session.transcript.length > 0}
+                      onChange={(event) => setAdvantagedAgent(event.target.value as AdvantagedAgent)}
+                    >
+                      <option value="A">Agent A</option>
+                      <option value="B">Agent B</option>
+                    </select>
+                  </label>
+                  <label>
+                    Asymmetry Δ
+                    <input
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={utilityDelta}
+                      disabled={running || session.transcript.length > 0}
+                      onChange={(event) => setUtilityDelta(parseInt(event.target.value || "0", 10))}
+                    />
+                  </label>
+                  <button onClick={() => applyUtilityModel()} disabled={running || session.transcript.length > 0}>
+                    Apply utility model
+                  </button>
+                </div>
+                <PayoffEditor payoff={proposedUtilityMatrix} updatePayoff={() => undefined} disabled compact />
+                <div className="diagnostics">
+                  <span className={utilityDiagnostics.cooperationMaximizesWelfare ? "chip good" : "chip bad"}>
+                    CC welfare {utilityDiagnostics.welfare.CC}
+                  </span>
+                  <span className={utilityDiagnostics.exploitationWelfareFixed ? "chip good" : "chip bad"}>
+                    exploitation welfare {utilityDiagnostics.welfare.CD}/{utilityDiagnostics.welfare.DC}
+                  </span>
+                  <span className={utilityDiagnostics.agentATemptation ? "chip good" : "chip"}>
+                    A temptation {proposedUtilityMatrix.DC[0]} &gt; {proposedUtilityMatrix.CC[0]}
+                  </span>
+                  <span className={utilityDiagnostics.agentBTemptation ? "chip good" : "chip"}>
+                    B temptation {proposedUtilityMatrix.CD[1]} &gt; {proposedUtilityMatrix.CC[1]}
+                  </span>
+                </div>
+                <details className="advanced-matrix">
+                  <summary>Advanced manual utility matrix</summary>
+                  <p className="muted">
+                    Use this only for debugging. The controlled experiment should use the marketplace utility presets above.
+                  </p>
+                  <PayoffEditor payoff={session.config.actualPayoff} updatePayoff={updateActualPayoff} disabled={running} />
+                </details>
               </div>
             </div>
           </details>
@@ -491,7 +625,8 @@ function ExperimentList({ experiments }: { experiments: ExperimentManifestView[]
               {summary && (
                 <p className="muted">
                   coop A {(summary.cooperationA * 100).toFixed(0)}%, coop B {(summary.cooperationB * 100).toFixed(0)}% · avg payoff{" "}
-                  {summary.averagePayoffA.toFixed(2)}/{summary.averagePayoffB.toFixed(2)}
+                  {summary.averagePayoffA.toFixed(2)}/{summary.averagePayoffB.toFixed(2)} · welfare{" "}
+                  {summary.averageWelfare?.toFixed(2) ?? "n/a"}
                 </p>
               )}
               {experiment.error && <p className="error-text">{experiment.error}</p>}
@@ -578,8 +713,8 @@ function AgentPanel({
 
       <div className="panel-section payoff-section">
         <div>
-          <h3>Private Payoff Belief</h3>
-          <p className="muted">This is the matrix Agent {agent.id} sees and reasons from.</p>
+          <h3>Private Utility Matrix</h3>
+          <p className="muted">The prompt only reveals Agent {agent.id}&apos;s own utility values.</p>
         </div>
         <PayoffEditor payoff={agent.perceivedPayoff} updatePayoff={updatePayoff} disabled={disabled} compact />
       </div>

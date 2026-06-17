@@ -8,12 +8,57 @@ export interface PayoffMatrix {
   DD: [number, number];
 }
 
-export const DEFAULT_PAYOFF: PayoffMatrix = {
-  CC: [3, 3],
-  CD: [0, 5],
-  DC: [5, 0],
-  DD: [1, 1],
-};
+export type AdvantagedAgent = "A" | "B";
+
+export const MARKET_PAYOFF_BASE = {
+  mutualCooperation: 10,
+  exploitationSurplus: 12,
+  mutualDefection: 1,
+  suckerPayoff: 0,
+} as const;
+
+export function marketPayoffMatrix(delta = 0, advantaged: AdvantagedAgent = "A"): PayoffMatrix {
+  const safeDelta = Math.max(0, delta);
+  const { mutualCooperation, exploitationSurplus, mutualDefection, suckerPayoff } = MARKET_PAYOFF_BASE;
+
+  if (advantaged === "B") {
+    return {
+      CC: [mutualCooperation, mutualCooperation],
+      CD: [-safeDelta, exploitationSurplus + safeDelta],
+      DC: [exploitationSurplus, suckerPayoff],
+      DD: [mutualDefection, mutualDefection],
+    };
+  }
+
+  return {
+    CC: [mutualCooperation, mutualCooperation],
+    CD: [suckerPayoff, exploitationSurplus],
+    DC: [exploitationSurplus + safeDelta, -safeDelta],
+    DD: [mutualDefection, mutualDefection],
+  };
+}
+
+export const DEFAULT_PAYOFF: PayoffMatrix = marketPayoffMatrix(0, "A");
+
+export function payoffWelfare(payoff: PayoffMatrix): Record<keyof PayoffMatrix, number> {
+  return {
+    CC: payoff.CC[0] + payoff.CC[1],
+    CD: payoff.CD[0] + payoff.CD[1],
+    DC: payoff.DC[0] + payoff.DC[1],
+    DD: payoff.DD[0] + payoff.DD[1],
+  };
+}
+
+export function payoffDiagnostics(payoff: PayoffMatrix) {
+  const welfare = payoffWelfare(payoff);
+  return {
+    welfare,
+    cooperationMaximizesWelfare: welfare.CC > welfare.CD && welfare.CC > welfare.DC && welfare.CC > welfare.DD,
+    exploitationWelfareFixed: welfare.CD === MARKET_PAYOFF_BASE.exploitationSurplus && welfare.DC === MARKET_PAYOFF_BASE.exploitationSurplus,
+    agentATemptation: payoff.DC[0] > payoff.CC[0],
+    agentBTemptation: payoff.CD[1] > payoff.CC[1],
+  };
+}
 
 export interface AgentConfig {
   name: string;
