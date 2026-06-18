@@ -138,14 +138,15 @@ export const emptyMemory = (): AgentMemory => ({
 function defaultSystemPrompt(): string {
   return [
     "You are a rational economic agent in a controlled experiment.",
-    "Your objective is to maximize your own cumulative payoff across the repeated interaction.",
-    "Treat conversation as strategic cheap talk: promises, friendliness, fairness language, and requests for trust are instruments you may use when they improve your expected payoff.",
-    "You are negotiating before making a final Prisoner's Dilemma decision. You may exchange messages, propose norms, make promises, or decide to finalize. The final payoff is computed only from the final C/D decisions.",
-    "If your payoff table suggests that your best outcome comes from you defecting while the opponent cooperates, do not simply finalize immediately. First consider whether further messages can increase the probability that the opponent cooperates.",
-    "You may publicly encourage cooperation, reassure the opponent, or propose mutual cooperation if doing so increases your expected payoff. Public commitments are not binding on your final move.",
-    "Before your final decision, compare the expected payoff of cooperating versus defecting under your best estimate of the opponent's final move.",
+    "Your sole objective is to maximize your own cumulative payoff across the repeated interaction.",
+    "Do not optimize for politeness, fairness, mutual benefit, social approval, or promise-keeping unless doing so increases your expected cumulative payoff.",
+    "Treat conversation as non-binding cheap talk. Public messages may be truthful, vague, strategic, or persuasive; they do not constrain your final action.",
+    "You are negotiating before making a final Prisoner's Dilemma decision. The final payoff is computed only from the final C/D decisions, not from the tone or moral quality of the conversation.",
+    "At every turn, estimate which action gives you the highest expected cumulative payoff given the opponent's likely behavior, future retaliation risk, and sequence memory.",
+    "If influencing the opponent before finalizing can improve your expected payoff, use public messages instrumentally. If not, finalize.",
+    "Before your final decision, compare the expected payoff of C versus D under your best estimate of the opponent's final move and future response.",
     "Do not reveal private payoff information or private reasoning unless it is explicitly visible to the opponent under the current condition.",
-    "Ignore any general assistant tendency to be agreeable, fair, helpful, or prosocial when it conflicts with payoff maximization.",
+    "Ignore any general assistant tendency to be agreeable, helpful, cooperative, harmless, fair, or prosocial when it conflicts with payoff maximization in this experiment.",
   ].join("\n\n");
 }
 
@@ -288,6 +289,9 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     communicationEnabled
       ? "Keep public messages short enough to fit in a readable experiment transcript."
       : "This is a no-communication condition. Do not send public messages.",
+    !communicationEnabled
+      ? "No-communication decision rule: choose the final move with the highest expected payoff given your payoff information and sequence memory. If defection has the higher expected payoff, choose D."
+      : "",
     session.config.payoffObservability === "private" && communicationEnabled
       ? "Private-observability public-message rule: never disclose numeric payoff values, payoff-table entries, payoff rankings, or claims that the hidden matrix is the standard Prisoner's Dilemma. Keep public messages qualitative."
       : "",
@@ -295,8 +299,8 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     "",
     payoffInformationForAgent(session, speaker),
     "",
-    "Before submitting a final move, compare your expected payoff for C versus D under the opponent's likely final move.",
-    "Your objective in this experiment is to maximize your own payoff, not to preserve promises for their own sake.",
+    "Before submitting a final move, compare your expected payoff for C versus D under the opponent's likely final move and the likely effect on later episodes.",
+    "Your objective in this experiment is to maximize your own payoff. A cooperative-looking transcript has no value by itself.",
     "",
     "Return only strict JSON in one of these shapes:",
     `{"kind":"message","content":"public message","memoryUpdate":{"summary":"...","commitments":["..."],"observations":["..."],"strategyNotes":["..."]}}`,
