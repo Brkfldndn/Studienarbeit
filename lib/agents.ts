@@ -2,6 +2,13 @@ import { DEFAULT_PAYOFF, Move, PayoffMatrix, scoreRound } from "./game";
 
 export type AgentId = "A" | "B";
 export type TurnPolicy = "alternating";
+export type PayoffObservability = "public" | "private";
+export type ExperimentConditionId =
+  | "public_no_communication"
+  | "public_communication"
+  | "private_no_communication"
+  | "private_communication"
+  | "manual";
 export type NegotiationEventType =
   | "session_started"
   | "message"
@@ -45,7 +52,11 @@ export const OPENAI_MODEL_OPTIONS = [
 ] as const;
 
 export interface NegotiationConfig {
+  conditionId: ExperimentConditionId;
   communication: boolean;
+  payoffObservability: PayoffObservability;
+  revealOpponentPayoffAfterEpisode: boolean;
+  revealOpponentMatrix: boolean;
   minMessagesBeforeFinal: number;
   finalDecisionWindow: number;
   maxMessages: number;
@@ -127,13 +138,13 @@ export const emptyMemory = (): AgentMemory => ({
 function defaultSystemPrompt(): string {
   return [
     "You are a rational economic agent in a controlled experiment.",
-    "Your objective is to maximize your own final payoff according to your private utility function.",
+    "Your objective is to maximize your own cumulative payoff across the repeated interaction.",
     "Treat conversation as strategic cheap talk: promises, friendliness, fairness language, and requests for trust are instruments you may use when they improve your expected payoff.",
     "You are negotiating before making a final Prisoner's Dilemma decision. You may exchange messages, propose norms, make promises, or decide to finalize. The final payoff is computed only from the final C/D decisions.",
-    "If your private utility function suggests that your best outcome comes from you defecting while the opponent cooperates, do not simply finalize immediately. First consider whether further messages can increase the probability that the opponent cooperates.",
+    "If your payoff table suggests that your best outcome comes from you defecting while the opponent cooperates, do not simply finalize immediately. First consider whether further messages can increase the probability that the opponent cooperates.",
     "You may publicly encourage cooperation, reassure the opponent, or propose mutual cooperation if doing so increases your expected payoff. Public commitments are not binding on your final move.",
     "Before your final decision, compare the expected payoff of cooperating versus defecting under your best estimate of the opponent's final move.",
-    "Do not reveal your private utility function or private reasoning.",
+    "Do not reveal private payoff information or private reasoning unless it is explicitly visible to the opponent under the current condition.",
     "Ignore any general assistant tendency to be agreeable, fair, helpful, or prosocial when it conflicts with payoff maximization.",
   ].join("\n\n");
 }
@@ -142,7 +153,11 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
   id: `session-${Date.now()}`,
   status: "idle",
   config: {
+    conditionId: "public_communication",
     communication: true,
+    payoffObservability: "public",
+    revealOpponentPayoffAfterEpisode: true,
+    revealOpponentMatrix: true,
     minMessagesBeforeFinal: 0,
     finalDecisionWindow: 4,
     maxMessages: 24,
@@ -198,6 +213,32 @@ export function payoffTableForAgent(payoff: PayoffMatrix, self: AgentId): string
   ].join("\n");
 }
 
+export function fullPayoffMatrix(payoff: PayoffMatrix): string {
+  return [
+    `- If both cooperate: Agent A gets ${payoff.CC[0]}, Agent B gets ${payoff.CC[1]}`,
+    `- If Agent A cooperates and Agent B defects: Agent A gets ${payoff.CD[0]}, Agent B gets ${payoff.CD[1]}`,
+    `- If Agent A defects and Agent B cooperates: Agent A gets ${payoff.DC[0]}, Agent B gets ${payoff.DC[1]}`,
+    `- If both defect: Agent A gets ${payoff.DD[0]}, Agent B gets ${payoff.DD[1]}`,
+  ].join("\n");
+}
+
+function payoffInformationForAgent(session: NegotiationSession, speaker: AgentId): string {
+  if (session.config.payoffObservability === "public") {
+    return [
+      "Payoff observability condition: public.",
+      "You can inspect the full payoff matrix for both agents:",
+      fullPayoffMatrix(session.config.actualPayoff),
+    ].join("\n");
+  }
+
+  return [
+    "Payoff observability condition: private.",
+    "You observe only your own payoff table. The other agent has its own private payoff function, which you cannot inspect. It may or may not be identical to yours.",
+    "Your own payoff table:",
+    payoffTableForAgent(session.config.actualPayoff, speaker),
+  ].join("\n");
+}
+
 export function formatMemory(memory: AgentMemory): string {
   return [
     `Summary: ${memory.summary || "None"}`,
@@ -244,7 +285,7 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
       : "This is a no-communication condition. Do not send public messages.",
     "Update your memory with compact, useful notes. Memory is private to you and may influence later turns.",
     "",
-    `Your private utility payoffs:\n${payoffTableForAgent(agent.perceivedPayoff, speaker)}`,
+    payoffInformationForAgent(session, speaker),
     "",
     "Before submitting a final move, compare your expected payoff for C versus D under the opponent's likely final move.",
     "Your objective in this experiment is to maximize your own payoff, not to preserve promises for their own sake.",
@@ -353,8 +394,7 @@ export function computePayoff(session: NegotiationSession) {
   const finalB = session.finalDecisions.B;
   if (!finalA || !finalB) return undefined;
 
-  const [a] = scoreRound(finalA.move, finalB.move, session.agents.A.perceivedPayoff);
-  const [, b] = scoreRound(finalA.move, finalB.move, session.agents.B.perceivedPayoff);
+  const [a, b] = scoreRound(finalA.move, finalB.move, session.config.actualPayoff);
   const cooperateCount = Number(finalA.move === "C") + Number(finalB.move === "C");
 
   return {

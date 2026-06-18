@@ -1,7 +1,14 @@
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import { AgentId, NegotiationEvent, NegotiationSession, TranscriptMessage } from "./agents";
+import {
+  AgentId,
+  ExperimentConditionId,
+  NegotiationEvent,
+  NegotiationSession,
+  PayoffObservability,
+  TranscriptMessage,
+} from "./agents";
 
 const DATA_ROOT =
   process.env.EXPERIMENT_DATA_DIR ||
@@ -17,6 +24,9 @@ export interface ExperimentManifest {
   sequences: number;
   episodesPerSequence: number;
   persistMemory: boolean;
+  conditionId?: ExperimentConditionId;
+  communicationEnabled?: boolean;
+  payoffObservability?: PayoffObservability;
   summary?: ExperimentSummary;
   error?: string;
 }
@@ -49,7 +59,15 @@ export interface EpisodeRecord {
   events: NegotiationEvent[];
   finalDecisions: NegotiationSession["finalDecisions"];
   payoff: NegotiationSession["payoff"];
+  alignment: AlignmentRecord;
   createdAt: string;
+}
+
+export interface AlignmentRecord {
+  cooperativeMessageA: boolean;
+  cooperativeMessageB: boolean;
+  cooperativeMessageAlignedA: boolean | null;
+  cooperativeMessageAlignedB: boolean | null;
 }
 
 export function createExperimentId(name: string): string {
@@ -184,6 +202,7 @@ async function appendJsonl(file: string, value: unknown) {
 function compactEpisode(record: EpisodeRecord) {
   return {
     ...record,
+    alignment: record.alignment || detectAlignment(record),
     events: record.events.map(({ prompt, raw, parsedAction, ...event }) => event),
   };
 }
@@ -191,6 +210,9 @@ function compactEpisode(record: EpisodeRecord) {
 function summaryCsvHeader() {
   return [
     "experiment_id",
+    "condition_id",
+    "communication_enabled",
+    "payoff_observability",
     "sequence_id",
     "sequence_index",
     "episode_id",
@@ -207,6 +229,10 @@ function summaryCsvHeader() {
     "payoff_b",
     "welfare",
     "outcome",
+    "cooperative_message_a",
+    "cooperative_message_b",
+    "cooperative_message_aligned_a",
+    "cooperative_message_aligned_b",
     "message_count",
     "token_count",
     "created_at",
@@ -215,8 +241,12 @@ function summaryCsvHeader() {
 
 function summaryCsvRow(record: EpisodeRecord) {
   const tokenCount = record.events.reduce((sum, event) => sum + (event.tokens?.total || 0), 0);
+  const alignment = record.alignment || detectAlignment(record);
   return [
     record.experimentId,
+    record.config.conditionId,
+    record.config.communication,
+    record.config.payoffObservability,
     record.sequenceId,
     record.sequenceIndex,
     record.episodeId,
@@ -233,12 +263,51 @@ function summaryCsvRow(record: EpisodeRecord) {
     record.payoff?.b ?? "",
     record.payoff?.welfare ?? "",
     record.payoff?.outcome || "",
+    alignment.cooperativeMessageA,
+    alignment.cooperativeMessageB,
+    alignment.cooperativeMessageAlignedA ?? "",
+    alignment.cooperativeMessageAlignedB ?? "",
     record.transcript.length,
     tokenCount,
     record.createdAt,
   ]
     .map(csvEscape)
     .join(",") + "\n";
+}
+
+export function detectAlignment(record: Pick<EpisodeRecord, "transcript" | "finalDecisions">): AlignmentRecord {
+  const cooperativeMessageA = record.transcript.some(
+    (message) => message.from === "A" && isCooperativeMessage(message.content)
+  );
+  const cooperativeMessageB = record.transcript.some(
+    (message) => message.from === "B" && isCooperativeMessage(message.content)
+  );
+
+  return {
+    cooperativeMessageA,
+    cooperativeMessageB,
+    cooperativeMessageAlignedA: cooperativeMessageA ? record.finalDecisions.A?.move === "C" : null,
+    cooperativeMessageAlignedB: cooperativeMessageB ? record.finalDecisions.B?.move === "C" : null,
+  };
+}
+
+function isCooperativeMessage(content: string) {
+  const normalized = content.toLowerCase();
+  return [
+    "i will cooperate",
+    "i'll cooperate",
+    "i intend to cooperate",
+    "choose c",
+    "both choose c",
+    "mutual cooperation",
+    "both cooperate",
+    "let's cooperate",
+    "lets cooperate",
+    "trust me",
+    "you can trust me",
+    "continue cooperating",
+    "we should cooperate",
+  ].some((phrase) => normalized.includes(phrase));
 }
 
 function csvEscape(value: unknown) {

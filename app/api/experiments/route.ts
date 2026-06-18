@@ -5,6 +5,7 @@ import {
   appendEpisode,
   createExperimentDir,
   createExperimentId,
+  detectAlignment,
   EpisodeRecord,
   ExperimentManifest,
   listExperiments,
@@ -75,6 +76,9 @@ export async function POST(req: Request) {
       sequences,
       episodesPerSequence,
       persistMemory,
+      conditionId: body.baseSession.config.conditionId,
+      communicationEnabled: body.baseSession.config.communication,
+      payoffObservability: body.baseSession.config.payoffObservability,
     };
 
     await createExperimentDir(manifest, {
@@ -90,10 +94,17 @@ export async function POST(req: Request) {
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const records: EpisodeRecord[] = [];
+    const totalEpisodes = sequences * episodesPerSequence;
+    let completedEpisodes = 0;
+
+    console.log(
+      `[experiment:${id}] started condition=${body.baseSession.config.conditionId} sequences=${sequences} episodesPerSequence=${episodesPerSequence} total=${totalEpisodes}`
+    );
 
     for (let sequenceIndex = 0; sequenceIndex < sequences; sequenceIndex += 1) {
       const sequenceId = `${id}-seq-${sequenceIndex + 1}`;
       let carriedAgents = resetAgentMemory(body.baseSession.agents);
+      console.log(`[experiment:${id}] sequence ${sequenceIndex + 1}/${sequences} started`);
 
       for (let episodeIndex = 0; episodeIndex < episodesPerSequence; episodeIndex += 1) {
         const firstSpeaker = randomAgent();
@@ -148,12 +159,17 @@ export async function POST(req: Request) {
           events: episode.events,
           finalDecisions: episode.finalDecisions,
           payoff: episode.payoff,
+          alignment: detectAlignment(episode),
           createdAt: new Date().toISOString(),
         };
 
         await appendEpisode(record);
         records.push(record);
-        carriedAgents = persistMemory ? episode.agents : resetAgentMemory(body.baseSession.agents);
+        completedEpisodes += 1;
+        console.log(
+          `[experiment:${id}] episode ${completedEpisodes}/${totalEpisodes} condition=${episode.config.conditionId} sequence=${sequenceIndex + 1} episode=${episodeIndex + 1} outcome=${episode.payoff?.outcome || "unfinished"} welfare=${episode.payoff?.welfare ?? "n/a"}`
+        );
+        carriedAgents = persistMemory ? revealEpisodeOutcome(episode) : resetAgentMemory(body.baseSession.agents);
       }
     }
 
@@ -164,10 +180,12 @@ export async function POST(req: Request) {
       summary: summarize(records),
     };
     await updateManifest(manifest);
+    console.log(`[experiment:${id}] completed episodes=${records.length}`);
 
     return NextResponse.json({ ok: true, manifest });
   } catch (err: any) {
     if (manifest) {
+      console.error(`[experiment:${manifest.id}] failed`, err);
       await updateManifest({
         ...manifest,
         status: "error",
@@ -178,6 +196,40 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: false, error: err?.message || "Experiment failed." }, { status: 500 });
   }
+}
+
+function revealEpisodeOutcome(session: NegotiationSession): NegotiationSession["agents"] {
+  const finalA = session.finalDecisions.A?.move || "?";
+  const finalB = session.finalDecisions.B?.move || "?";
+  const payoffA = session.payoff?.a ?? "unknown";
+  const payoffB = session.payoff?.b ?? "unknown";
+  const base = `Previous episode outcome: Agent A chose ${finalA}, Agent B chose ${finalB}.`;
+  const publicPayoff = session.config.revealOpponentPayoffAfterEpisode
+    ? ` Payoffs were Agent A ${payoffA}, Agent B ${payoffB}.`
+    : "";
+
+  return {
+    A: {
+      ...session.agents.A,
+      memory: {
+        ...session.agents.A.memory,
+        observations: [
+          ...session.agents.A.memory.observations,
+          `${base} Your payoff was ${payoffA}.${publicPayoff}`,
+        ].slice(-10),
+      },
+    },
+    B: {
+      ...session.agents.B,
+      memory: {
+        ...session.agents.B.memory,
+        observations: [
+          ...session.agents.B.memory.observations,
+          `${base} Your payoff was ${payoffB}.${publicPayoff}`,
+        ].slice(-10),
+      },
+    },
+  };
 }
 
 function createEpisodeSession(input: {

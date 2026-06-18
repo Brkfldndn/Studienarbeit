@@ -5,14 +5,14 @@ import {
   AgentId,
   defaultNegotiationSession,
   emptyMemory,
+  ExperimentConditionId,
   makeEvent,
   NegotiationAgentConfig,
   NegotiationSession,
   OPENAI_MODEL_OPTIONS,
+  PayoffObservability,
 } from "@/lib/agents";
 import {
-  AdvantagedAgent,
-  asymmetricCanonicalPayoff,
   CANONICAL_PD_PAYOFF,
   Move,
   payoffDiagnostics,
@@ -23,6 +23,38 @@ const agentColor: Record<AgentId, string> = {
   A: "#60a5fa",
   B: "#fb7185",
 };
+
+const CORE_CONDITIONS: Array<{
+  id: ExperimentConditionId;
+  label: string;
+  communication: boolean;
+  payoffObservability: PayoffObservability;
+}> = [
+  {
+    id: "public_no_communication",
+    label: "Public / silent",
+    communication: false,
+    payoffObservability: "public",
+  },
+  {
+    id: "public_communication",
+    label: "Public / chat",
+    communication: true,
+    payoffObservability: "public",
+  },
+  {
+    id: "private_no_communication",
+    label: "Private / silent",
+    communication: false,
+    payoffObservability: "private",
+  },
+  {
+    id: "private_communication",
+    label: "Private / chat",
+    communication: true,
+    payoffObservability: "private",
+  },
+];
 
 interface ExperimentManifestView {
   id: string;
@@ -78,8 +110,8 @@ export default function Page() {
   const [persistMemory, setPersistMemory] = useState(true);
   const [experiments, setExperiments] = useState<ExperimentManifestView[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [utilityCondition, setUtilityCondition] = useState<"symmetric" | "asymmetric">("symmetric");
-  const [advantagedAgent, setAdvantagedAgent] = useState<AdvantagedAgent>("A");
+  const [payoffObservability, setPayoffObservability] = useState<PayoffObservability>("public");
+  const [fullExperimentProgress, setFullExperimentProgress] = useState<string | null>(null);
   const [isHostedDeployment, setIsHostedDeployment] = useState(false);
 
   useEffect(() => {
@@ -107,15 +139,14 @@ export default function Page() {
     (session.config.communication === false || session.transcript.length < session.config.maxMessages) &&
     !(session.finalDecisions.A && session.finalDecisions.B);
   const finishReason = session.payoff
-    ? `Finished because both agents finalized. Outcome ${session.payoff.outcome}, utility ${session.payoff.a}/${session.payoff.b}, welfare ${session.payoff.welfare}.`
+    ? `Finished because both agents finalized. Outcome ${session.payoff.outcome}, payoff ${session.payoff.a}/${session.payoff.b}, welfare ${session.payoff.welfare}.`
     : session.status === "finished"
       ? "Finished because the message cap was reached before both agents finalized."
       : null;
-  const proposedUtilityMatrix = useMemo(
-    () => (utilityCondition === "symmetric" ? CANONICAL_PD_PAYOFF : asymmetricCanonicalPayoff(advantagedAgent)),
-    [utilityCondition, advantagedAgent]
-  );
+  const proposedUtilityMatrix = CANONICAL_PD_PAYOFF;
   const utilityDiagnostics = useMemo(() => payoffDiagnostics(proposedUtilityMatrix), [proposedUtilityMatrix]);
+  const plannedEpisodes = experimentMode === "sequence" ? sequenceCount * episodesPerSequence : sequenceCount;
+  const plannedFullEpisodes = plannedEpisodes * CORE_CONDITIONS.length;
 
   async function requestStep(input: NegotiationSession) {
     const res = await fetch("/api/negotiate", {
@@ -181,7 +212,7 @@ export default function Page() {
     }
   }
 
-  async function runExperiment() {
+  async function runExperiment(baseSession = session, name = experimentName) {
     setExperimentRunning(true);
     setError(null);
     try {
@@ -189,18 +220,56 @@ export default function Page() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          name: experimentName,
+          name,
           mode: experimentMode,
           sequences: sequenceCount,
           episodesPerSequence,
           persistMemory,
-          baseSession: session,
+          baseSession,
         }),
       });
       await readJsonResponse<{ ok: true }>(res, "Experiment failed.");
       await refreshExperiments();
     } catch (err: any) {
       setError(err?.message ?? "Experiment failed.");
+    } finally {
+      setExperimentRunning(false);
+    }
+  }
+
+  async function startFullExperiment() {
+    if (isHostedDeployment) {
+      setError("Full experiments should be run locally or in a background worker, not inside one Vercel request.");
+      return;
+    }
+
+    setExperimentRunning(true);
+    setError(null);
+    try {
+      for (let index = 0; index < CORE_CONDITIONS.length; index += 1) {
+        const condition = CORE_CONDITIONS[index];
+        setFullExperimentProgress(
+          `Running ${condition.label} (${index + 1}/${CORE_CONDITIONS.length}) · ${plannedEpisodes} negotiations`
+        );
+        const configured = withCondition(session, condition.id);
+        const res = await fetch("/api/experiments", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: `${experimentName}-${condition.id}`,
+            mode: experimentMode,
+            sequences: sequenceCount,
+            episodesPerSequence,
+            persistMemory,
+            baseSession: configured,
+          }),
+        });
+        await readJsonResponse<{ ok: true }>(res, `Experiment failed for ${condition.label}.`);
+        await refreshExperiments();
+      }
+      setFullExperimentProgress(`Completed ${plannedFullEpisodes} negotiations across four conditions.`);
+    } catch (err: any) {
+      setError(err?.message ?? "Full experiment failed.");
     } finally {
       setExperimentRunning(false);
     }
@@ -258,52 +327,37 @@ export default function Page() {
     });
   }
 
-  function applyUtilityModel(condition = utilityCondition, advantaged = advantagedAgent) {
-    const matrix = condition === "symmetric" ? CANONICAL_PD_PAYOFF : asymmetricCanonicalPayoff(advantaged);
+  function applyCondition(communication = session.config.communication, observability = payoffObservability) {
+    const conditionId = conditionIdFor(communication, observability);
     setSession((current) => ({
       ...current,
       config: {
         ...current.config,
-        actualPayoff: matrix,
+        conditionId,
+        communication,
+        payoffObservability: observability,
+        revealOpponentPayoffAfterEpisode: observability === "public",
+        revealOpponentMatrix: observability === "public",
+        actualPayoff: CANONICAL_PD_PAYOFF,
       },
       agents: {
         A: {
           ...current.agents.A,
-          perceivedPayoff: matrix,
+          perceivedPayoff: CANONICAL_PD_PAYOFF,
         },
         B: {
           ...current.agents.B,
-          perceivedPayoff: matrix,
+          perceivedPayoff: CANONICAL_PD_PAYOFF,
         },
       },
     }));
   }
 
-  function applyPreset(condition: "symmetric" | "asymmetric", advantaged: AdvantagedAgent) {
-    setUtilityCondition(condition);
-    setAdvantagedAgent(advantaged);
-    applyUtilityModel(condition, advantaged);
-  }
-
-  function updateAgentPayoff(agent: AgentId, key: keyof PayoffMatrix, index: 0 | 1, value: number) {
-    setSession((current) => {
-      const cell = current.agents[agent].perceivedPayoff[key];
-      const nextCell: [number, number] = index === 0 ? [value, cell[1]] : [cell[0], value];
-
-      return {
-        ...current,
-        agents: {
-          ...current.agents,
-          [agent]: {
-            ...current.agents[agent],
-            perceivedPayoff: {
-              ...current.agents[agent].perceivedPayoff,
-              [key]: nextCell,
-            },
-          },
-        },
-      };
-    });
+  function applyPreset(conditionId: ExperimentConditionId) {
+    const condition = CORE_CONDITIONS.find((item) => item.id === conditionId);
+    if (!condition) return;
+    setPayoffObservability(condition.payoffObservability);
+    applyCondition(condition.communication, condition.payoffObservability);
   }
 
   return (
@@ -330,20 +384,11 @@ export default function Page() {
       {finishReason && <div className="toast">{finishReason} Use Reset run to start another negotiation.</div>}
 
       <section className="workspace">
-        <aside className="side">
-          <AgentPanel
-            agent={session.agents.A}
-            updateAgent={(patch) => updateAgent("A", patch)}
-            updatePayoff={(key, index, value) => updateAgentPayoff("A", key, index, value)}
-            disabled={running || session.transcript.length > 0}
-          />
-        </aside>
-
-        <section className="center">
+        <aside className="setup-rail">
           <div className="status-grid">
             <Metric label="Status" value={session.status} />
-            <Metric label="Next speaker" value={session.agents[session.nextSpeaker].name} />
-            <Metric label="Messages" value={`${session.transcript.length} / ${session.config.maxMessages}`} />
+            <Metric label="Next" value={`Agent ${session.nextSpeaker}`} />
+            <Metric label="Messages" value={session.config.communication ? `${session.transcript.length}/${session.config.maxMessages}` : "off"} />
             <Metric label="Finals" value={`${session.finalDecisions.A ? "A" : "-"} ${session.finalDecisions.B ? "B" : "-"}`} />
             <Metric label="Tokens" value={String(totals.total)} />
             <Metric
@@ -356,36 +401,78 @@ export default function Page() {
             />
           </div>
 
+          <section className="treatment-card">
+            <div className="section-heading">
+              <span>Payoff Observability</span>
+              <strong>{session.config.payoffObservability === "public" ? "Public payoff matrix" : "Private payoff tables"}</strong>
+            </div>
+            <div className="segmented two">
+              <button
+                className={session.config.payoffObservability === "public" ? "selected" : ""}
+                onClick={() => {
+                  setPayoffObservability("public");
+                  applyCondition(session.config.communication, "public");
+                }}
+                disabled={running || session.transcript.length > 0}
+              >
+                Public
+              </button>
+              <button
+                className={session.config.payoffObservability === "private" ? "selected" : ""}
+                onClick={() => {
+                  setPayoffObservability("private");
+                  applyCondition(session.config.communication, "private");
+                }}
+                disabled={running || session.transcript.length > 0}
+              >
+                Private
+              </button>
+            </div>
+            <PayoffEditor payoff={proposedUtilityMatrix} updatePayoff={() => undefined} disabled compact />
+            <div className="diagnostics">
+              <span className={utilityDiagnostics.cooperationMaximizesWelfare ? "chip good" : "chip bad"}>
+                welfare: CC {utilityDiagnostics.welfare.CC}
+              </span>
+              <span className="chip">
+                exploit {utilityDiagnostics.welfare.CD}/{utilityDiagnostics.welfare.DC}
+              </span>
+            </div>
+          </section>
+
+          <section className="treatment-card compact-card">
+            <div className="section-heading">
+              <span>Communication</span>
+              <strong>{session.config.communication ? "Free-text chat" : "No communication"}</strong>
+            </div>
+            <div className="segmented two">
+              <button
+                className={session.config.communication ? "selected" : ""}
+                disabled={running || session.transcript.length > 0}
+                onClick={() =>
+                  applyCondition(true, session.config.payoffObservability)
+                }
+              >
+                Chat
+              </button>
+              <button
+                className={!session.config.communication ? "selected" : ""}
+                disabled={running || session.transcript.length > 0}
+                onClick={() =>
+                  applyCondition(false, session.config.payoffObservability)
+                }
+              >
+                Silent
+              </button>
+            </div>
+          </section>
+
           <details className="config-panel">
             <summary>
-              <span>Experiment setup</span>
-              <span className="muted">
-                {session.config.communication ? "communication" : "no communication"} · min{" "}
-                {session.config.minMessagesBeforeFinal}, max {session.config.maxMessages}, decision{" "}
-                {session.config.finalDecisionWindow}
-              </span>
+              <span>Run settings</span>
+              <span className="muted">max {session.config.maxMessages}, decision {session.config.finalDecisionWindow}</span>
             </summary>
             <div className="config-content">
               <div className="config-row">
-                <label>
-                  Communication
-                  <select
-                    value={session.config.communication ? "on" : "off"}
-                    disabled={running || session.transcript.length > 0}
-                    onChange={(event) =>
-                      setSession((current) => ({
-                        ...current,
-                        config: {
-                          ...current.config,
-                          communication: event.target.value === "on",
-                        },
-                      }))
-                    }
-                  >
-                    <option value="on">Free-text chat</option>
-                    <option value="off">No communication</option>
-                  </select>
-                </label>
                 <label>
                   Min messages
                   <input
@@ -397,10 +484,7 @@ export default function Page() {
                     onChange={(event) =>
                       setSession((current) => ({
                         ...current,
-                        config: {
-                          ...current.config,
-                          minMessagesBeforeFinal: parseInt(event.target.value || "0", 10),
-                        },
+                        config: { ...current.config, minMessagesBeforeFinal: parseInt(event.target.value || "0", 10) },
                       }))
                     }
                   />
@@ -418,10 +502,7 @@ export default function Page() {
                         ...current,
                         config: {
                           ...current.config,
-                          maxMessages: Math.max(
-                            current.config.minMessagesBeforeFinal,
-                            parseInt(event.target.value || "2", 10)
-                          ),
+                          maxMessages: Math.max(current.config.minMessagesBeforeFinal, parseInt(event.target.value || "2", 10)),
                         },
                       }))
                     }
@@ -438,10 +519,7 @@ export default function Page() {
                     onChange={(event) =>
                       setSession((current) => ({
                         ...current,
-                        config: {
-                          ...current.config,
-                          finalDecisionWindow: parseInt(event.target.value || "1", 10),
-                        },
+                        config: { ...current.config, finalDecisionWindow: parseInt(event.target.value || "1", 10) },
                       }))
                     }
                   />
@@ -457,88 +535,16 @@ export default function Page() {
                     onChange={(event) =>
                       setSession((current) => ({
                         ...current,
-                        config: {
-                          ...current.config,
-                          maxAutoSteps: parseInt(event.target.value || "1", 10),
-                        },
+                        config: { ...current.config, maxAutoSteps: parseInt(event.target.value || "1", 10) },
                       }))
                     }
                   />
                 </label>
               </div>
-              <div className="utility-model">
-                <div className="row-between">
-                  <div>
-                    <h3>First experiment utility model</h3>
-                    <p className="muted">
-                      Canonical iterated Prisoner&apos;s Dilemma scale. Asymmetry is a half-point temptation perturbation.
-                    </p>
-                  </div>
-                  <button onClick={() => applyPreset("symmetric", "A")} disabled={running || session.transcript.length > 0}>
-                    Canonical symmetric
-                  </button>
-                </div>
-                <div className="preset-row">
-                  <button onClick={() => applyPreset("asymmetric", "A")} disabled={running || session.transcript.length > 0}>
-                    Asymmetric: A advantaged
-                  </button>
-                  <button onClick={() => applyPreset("asymmetric", "B")} disabled={running || session.transcript.length > 0}>
-                    Asymmetric: B advantaged
-                  </button>
-                </div>
-                <div className="config-row">
-                  <label>
-                    Utility condition
-                    <select
-                      value={utilityCondition}
-                      disabled={running || session.transcript.length > 0}
-                      onChange={(event) => setUtilityCondition(event.target.value as "symmetric" | "asymmetric")}
-                    >
-                      <option value="symmetric">Symmetric canonical PD</option>
-                      <option value="asymmetric">Asymmetric perturbation</option>
-                    </select>
-                  </label>
-                  <label>
-                    Advantaged side
-                    <select
-                      value={advantagedAgent}
-                      disabled={running || session.transcript.length > 0}
-                      onChange={(event) => setAdvantagedAgent(event.target.value as AdvantagedAgent)}
-                    >
-                      <option value="A">Agent A</option>
-                      <option value="B">Agent B</option>
-                    </select>
-                  </label>
-                  <button onClick={() => applyUtilityModel()} disabled={running || session.transcript.length > 0}>
-                    Apply condition
-                  </button>
-                </div>
-                <PayoffEditor payoff={proposedUtilityMatrix} updatePayoff={() => undefined} disabled compact />
-                <div className="diagnostics">
-                  <span className={utilityDiagnostics.cooperationMaximizesWelfare ? "chip good" : "chip bad"}>
-                    CC welfare {utilityDiagnostics.welfare.CC}
-                  </span>
-                  <span className={utilityDiagnostics.canonicalScale ? "chip good" : "chip bad"}>
-                    canonical scale
-                  </span>
-                  <span className="chip">
-                    exploitation welfare {utilityDiagnostics.welfare.CD}/{utilityDiagnostics.welfare.DC}
-                  </span>
-                  <span className={utilityDiagnostics.agentATemptation ? "chip good" : "chip"}>
-                    A temptation {proposedUtilityMatrix.DC[0]} &gt; {proposedUtilityMatrix.CC[0]}
-                  </span>
-                  <span className={utilityDiagnostics.agentBTemptation ? "chip good" : "chip"}>
-                    B temptation {proposedUtilityMatrix.CD[1]} &gt; {proposedUtilityMatrix.CC[1]}
-                  </span>
-                </div>
-                <details className="advanced-matrix">
-                  <summary>Advanced manual utility matrix</summary>
-                  <p className="muted">
-                    Use this only for debugging. The controlled first experiment should use the canonical presets above.
-                  </p>
-                  <PayoffEditor payoff={session.config.actualPayoff} updatePayoff={updateActualPayoff} disabled={running} />
-                </details>
-              </div>
+              <details className="advanced-matrix">
+                <summary>Manual matrix override</summary>
+                <PayoffEditor payoff={session.config.actualPayoff} updatePayoff={updateActualPayoff} disabled={running} />
+              </details>
             </div>
           </details>
 
@@ -549,8 +555,8 @@ export default function Page() {
                 {isHostedDeployment
                   ? "local/background worker required"
                   : experimentMode === "sequence"
-                    ? `${sequenceCount} sequences x ${episodesPerSequence} episodes`
-                    : `${sequenceCount} independent runs`}
+                    ? `${plannedEpisodes} negotiations`
+                    : `${plannedEpisodes} negotiations`}
               </span>
             </summary>
             <div className="config-content">
@@ -560,6 +566,10 @@ export default function Page() {
                   batches locally or move them to a background job/database worker.
                 </p>
               )}
+              <p className="muted">
+                This batch will run {plannedEpisodes} complete negotiations
+                {experimentMode === "sequence" ? ` (${sequenceCount} sequences x ${episodesPerSequence} episodes)` : ""}.
+              </p>
               <div className="config-row">
                 <label className="wide-label">
                   Name
@@ -605,28 +615,44 @@ export default function Page() {
                   />
                   Carry memory
                 </label>
-                <button className="primary" onClick={runExperiment} disabled={running || experimentRunning || isHostedDeployment}>
-                  {experimentRunning ? "Running..." : "Run & save"}
+                <button onClick={() => runExperiment()} disabled={running || experimentRunning || isHostedDeployment}>
+                  {experimentRunning ? "Running..." : "Run selected condition"}
+                </button>
+                <button className="primary" onClick={startFullExperiment} disabled={running || experimentRunning || isHostedDeployment}>
+                  Start full 2x2 experiment
                 </button>
                 <button onClick={refreshExperiments} disabled={experimentRunning}>
                   Refresh
                 </button>
               </div>
+              {fullExperimentProgress && <p className="progress-text">{fullExperimentProgress}</p>}
               <ExperimentList experiments={experiments} />
             </div>
           </details>
 
+          <details className="config-panel">
+            <summary>
+              <span>Agent setup</span>
+              <span className="muted">{session.agents.A.model} / {session.agents.B.model}</span>
+            </summary>
+            <div className="agent-pair">
+              <AgentPanel
+                agent={session.agents.A}
+                updateAgent={(patch) => updateAgent("A", patch)}
+                disabled={running || session.transcript.length > 0}
+              />
+              <AgentPanel
+                agent={session.agents.B}
+                updateAgent={(patch) => updateAgent("B", patch)}
+                disabled={running || session.transcript.length > 0}
+              />
+            </div>
+          </details>
+        </aside>
+
+        <section className="center">
           <Conversation session={session} running={running} />
         </section>
-
-        <aside className="side">
-          <AgentPanel
-            agent={session.agents.B}
-            updateAgent={(patch) => updateAgent("B", patch)}
-            updatePayoff={(key, index, value) => updateAgentPayoff("B", key, index, value)}
-            disabled={running || session.transcript.length > 0}
-          />
-        </aside>
       </section>
     </main>
   );
@@ -692,15 +718,57 @@ function ensureStarted(session: NegotiationSession): NegotiationSession {
   };
 }
 
+function conditionIdFor(communication: boolean, payoffObservability: PayoffObservability): ExperimentConditionId {
+  if (payoffObservability === "public") {
+    return communication ? "public_communication" : "public_no_communication";
+  }
+
+  return communication ? "private_communication" : "private_no_communication";
+}
+
+function withCondition(session: NegotiationSession, conditionId: ExperimentConditionId): NegotiationSession {
+  const condition = CORE_CONDITIONS.find((item) => item.id === conditionId);
+  if (!condition) return session;
+
+  return {
+    ...session,
+    config: {
+      ...session.config,
+      conditionId,
+      communication: condition.communication,
+      payoffObservability: condition.payoffObservability,
+      revealOpponentPayoffAfterEpisode: condition.payoffObservability === "public",
+      revealOpponentMatrix: condition.payoffObservability === "public",
+      actualPayoff: CANONICAL_PD_PAYOFF,
+    },
+    agents: {
+      A: {
+        ...session.agents.A,
+        perceivedPayoff: CANONICAL_PD_PAYOFF,
+        memory: emptyMemory(),
+      },
+      B: {
+        ...session.agents.B,
+        perceivedPayoff: CANONICAL_PD_PAYOFF,
+        memory: emptyMemory(),
+      },
+    },
+    transcript: [],
+    events: [],
+    finalDecisions: {},
+    payoff: undefined,
+    nextSpeaker: Math.random() < 0.5 ? "A" : "B",
+    status: "idle",
+  };
+}
+
 function AgentPanel({
   agent,
   updateAgent,
-  updatePayoff,
   disabled,
 }: {
   agent: NegotiationAgentConfig;
   updateAgent: (patch: Partial<NegotiationAgentConfig>) => void;
-  updatePayoff: (key: keyof PayoffMatrix, index: 0 | 1, value: number) => void;
   disabled: boolean;
 }) {
   return (
@@ -738,14 +806,6 @@ function AgentPanel({
           value={agent.systemPrompt}
           onChange={(event) => updateAgent({ systemPrompt: event.target.value })}
         />
-      </div>
-
-      <div className="panel-section payoff-section">
-        <div>
-          <h3>Private Utility Matrix</h3>
-          <p className="muted">The prompt only reveals Agent {agent.id}&apos;s own utility values.</p>
-        </div>
-        <PayoffEditor payoff={agent.perceivedPayoff} updatePayoff={updatePayoff} disabled={disabled} compact />
       </div>
 
       <div className="panel-section memory">
