@@ -108,7 +108,7 @@ export async function POST(req: Request) {
         for (let step = 0; step < maxSteps; step += 1) {
           if (
             episode.status === "finished" ||
-            episode.transcript.length >= episode.config.maxMessages ||
+            (episode.config.communication !== false && episode.transcript.length >= episode.config.maxMessages) ||
             (episode.finalDecisions.A && episode.finalDecisions.B)
           ) {
             break;

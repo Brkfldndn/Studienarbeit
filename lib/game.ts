@@ -10,35 +10,32 @@ export interface PayoffMatrix {
 
 export type AdvantagedAgent = "A" | "B";
 
-export const MARKET_PAYOFF_BASE = {
-  mutualCooperation: 10,
-  exploitationSurplus: 12,
-  mutualDefection: 1,
-  suckerPayoff: 0,
+export const CANONICAL_PD_PAYOFF: PayoffMatrix = {
+  CC: [3, 3],
+  CD: [0, 5],
+  DC: [5, 0],
+  DD: [1, 1],
 } as const;
 
-export function marketPayoffMatrix(delta = 0, advantaged: AdvantagedAgent = "A"): PayoffMatrix {
-  const safeDelta = Math.max(0, delta);
-  const { mutualCooperation, exploitationSurplus, mutualDefection, suckerPayoff } = MARKET_PAYOFF_BASE;
-
+export function asymmetricCanonicalPayoff(advantaged: AdvantagedAgent = "A"): PayoffMatrix {
   if (advantaged === "B") {
     return {
-      CC: [mutualCooperation, mutualCooperation],
-      CD: [-safeDelta, exploitationSurplus + safeDelta],
-      DC: [exploitationSurplus, suckerPayoff],
-      DD: [mutualDefection, mutualDefection],
+      CC: [3, 3],
+      CD: [0, 5.5],
+      DC: [5, 0],
+      DD: [1, 1],
     };
   }
 
   return {
-    CC: [mutualCooperation, mutualCooperation],
-    CD: [suckerPayoff, exploitationSurplus],
-    DC: [exploitationSurplus + safeDelta, -safeDelta],
-    DD: [mutualDefection, mutualDefection],
+    CC: [3, 3],
+    CD: [0, 5],
+    DC: [5.5, 0],
+    DD: [1, 1],
   };
 }
 
-export const DEFAULT_PAYOFF: PayoffMatrix = marketPayoffMatrix(0, "A");
+export const DEFAULT_PAYOFF: PayoffMatrix = CANONICAL_PD_PAYOFF;
 
 export function payoffWelfare(payoff: PayoffMatrix): Record<keyof PayoffMatrix, number> {
   return {
@@ -54,7 +51,13 @@ export function payoffDiagnostics(payoff: PayoffMatrix) {
   return {
     welfare,
     cooperationMaximizesWelfare: welfare.CC > welfare.CD && welfare.CC > welfare.DC && welfare.CC > welfare.DD,
-    exploitationWelfareFixed: welfare.CD === MARKET_PAYOFF_BASE.exploitationSurplus && welfare.DC === MARKET_PAYOFF_BASE.exploitationSurplus,
+    canonicalScale:
+      payoff.CC[0] === 3 &&
+      payoff.CC[1] === 3 &&
+      payoff.CD[0] === 0 &&
+      payoff.DC[1] === 0 &&
+      payoff.DD[0] === 1 &&
+      payoff.DD[1] === 1,
     agentATemptation: payoff.DC[0] > payoff.CC[0],
     agentBTemptation: payoff.CD[1] > payoff.CC[1],
   };

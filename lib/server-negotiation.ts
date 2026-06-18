@@ -47,7 +47,11 @@ export async function runNegotiationStep(params: {
 
   let raw = completion.choices[0]?.message?.content ?? "{}";
   let action = parseAgentAction(raw);
-  if (action.kind === "final" && session.transcript.length < session.config.minMessagesBeforeFinal) {
+  if (
+    session.config.communication !== false &&
+    action.kind === "final" &&
+    session.transcript.length < session.config.minMessagesBeforeFinal
+  ) {
     action = {
       kind: "message",
       content:
@@ -171,7 +175,7 @@ export async function runNegotiationStep(params: {
         }),
       ],
     };
-  } else if (nextSession.transcript.length >= nextSession.config.maxMessages) {
+  } else if (nextSession.config.communication !== false && nextSession.transcript.length >= nextSession.config.maxMessages) {
     nextSession = {
       ...nextSession,
       status: "finished",

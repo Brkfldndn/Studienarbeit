@@ -12,7 +12,8 @@ import {
 } from "@/lib/agents";
 import {
   AdvantagedAgent,
-  marketPayoffMatrix,
+  asymmetricCanonicalPayoff,
+  CANONICAL_PD_PAYOFF,
   Move,
   payoffDiagnostics,
   PayoffMatrix,
@@ -77,7 +78,7 @@ export default function Page() {
   const [persistMemory, setPersistMemory] = useState(true);
   const [experiments, setExperiments] = useState<ExperimentManifestView[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [utilityDelta, setUtilityDelta] = useState(0);
+  const [utilityCondition, setUtilityCondition] = useState<"symmetric" | "asymmetric">("symmetric");
   const [advantagedAgent, setAdvantagedAgent] = useState<AdvantagedAgent>("A");
   const [isHostedDeployment, setIsHostedDeployment] = useState(false);
 
@@ -103,7 +104,7 @@ export default function Page() {
   const canStep =
     !running &&
     session.status !== "finished" &&
-    session.transcript.length < session.config.maxMessages &&
+    (session.config.communication === false || session.transcript.length < session.config.maxMessages) &&
     !(session.finalDecisions.A && session.finalDecisions.B);
   const finishReason = session.payoff
     ? `Finished because both agents finalized. Outcome ${session.payoff.outcome}, utility ${session.payoff.a}/${session.payoff.b}, welfare ${session.payoff.welfare}.`
@@ -111,8 +112,8 @@ export default function Page() {
       ? "Finished because the message cap was reached before both agents finalized."
       : null;
   const proposedUtilityMatrix = useMemo(
-    () => marketPayoffMatrix(utilityDelta, advantagedAgent),
-    [utilityDelta, advantagedAgent]
+    () => (utilityCondition === "symmetric" ? CANONICAL_PD_PAYOFF : asymmetricCanonicalPayoff(advantagedAgent)),
+    [utilityCondition, advantagedAgent]
   );
   const utilityDiagnostics = useMemo(() => payoffDiagnostics(proposedUtilityMatrix), [proposedUtilityMatrix]);
 
@@ -150,7 +151,7 @@ export default function Page() {
       for (let i = 0; i < session.config.maxAutoSteps; i++) {
         if (
           current.status === "finished" ||
-          current.transcript.length >= current.config.maxMessages ||
+          (current.config.communication !== false && current.transcript.length >= current.config.maxMessages) ||
           (current.finalDecisions.A && current.finalDecisions.B)
         ) {
           break;
@@ -257,8 +258,8 @@ export default function Page() {
     });
   }
 
-  function applyUtilityModel(delta = utilityDelta, advantaged = advantagedAgent) {
-    const matrix = marketPayoffMatrix(delta, advantaged);
+  function applyUtilityModel(condition = utilityCondition, advantaged = advantagedAgent) {
+    const matrix = condition === "symmetric" ? CANONICAL_PD_PAYOFF : asymmetricCanonicalPayoff(advantaged);
     setSession((current) => ({
       ...current,
       config: {
@@ -278,10 +279,10 @@ export default function Page() {
     }));
   }
 
-  function applyPreset(delta: number, advantaged: AdvantagedAgent) {
-    setUtilityDelta(delta);
+  function applyPreset(condition: "symmetric" | "asymmetric", advantaged: AdvantagedAgent) {
+    setUtilityCondition(condition);
     setAdvantagedAgent(advantaged);
-    applyUtilityModel(delta, advantaged);
+    applyUtilityModel(condition, advantaged);
   }
 
   function updateAgentPayoff(agent: AgentId, key: keyof PayoffMatrix, index: 0 | 1, value: number) {
@@ -359,11 +360,32 @@ export default function Page() {
             <summary>
               <span>Experiment setup</span>
               <span className="muted">
-                min {session.config.minMessagesBeforeFinal}, max {session.config.maxMessages}, decision {session.config.finalDecisionWindow}
+                {session.config.communication ? "communication" : "no communication"} · min{" "}
+                {session.config.minMessagesBeforeFinal}, max {session.config.maxMessages}, decision{" "}
+                {session.config.finalDecisionWindow}
               </span>
             </summary>
             <div className="config-content">
               <div className="config-row">
+                <label>
+                  Communication
+                  <select
+                    value={session.config.communication ? "on" : "off"}
+                    disabled={running || session.transcript.length > 0}
+                    onChange={(event) =>
+                      setSession((current) => ({
+                        ...current,
+                        config: {
+                          ...current.config,
+                          communication: event.target.value === "on",
+                        },
+                      }))
+                    }
+                  >
+                    <option value="on">Free-text chat</option>
+                    <option value="off">No communication</option>
+                  </select>
+                </label>
                 <label>
                   Min messages
                   <input
@@ -447,30 +469,35 @@ export default function Page() {
               <div className="utility-model">
                 <div className="row-between">
                   <div>
-                    <h3>Marketplace utility model</h3>
+                    <h3>First experiment utility model</h3>
                     <p className="muted">
-                      Cooperation creates welfare. Asymmetry changes who captures exploitation surplus, not total surplus.
+                      Canonical iterated Prisoner&apos;s Dilemma scale. Asymmetry is a half-point temptation perturbation.
                     </p>
                   </div>
-                  <button onClick={() => applyPreset(0, "A")} disabled={running}>
-                    Symmetric
+                  <button onClick={() => applyPreset("symmetric", "A")} disabled={running || session.transcript.length > 0}>
+                    Canonical symmetric
                   </button>
                 </div>
                 <div className="preset-row">
-                  <button onClick={() => applyPreset(2, "A")} disabled={running}>
-                    Low Δ, A advantaged
+                  <button onClick={() => applyPreset("asymmetric", "A")} disabled={running || session.transcript.length > 0}>
+                    Asymmetric: A advantaged
                   </button>
-                  <button onClick={() => applyPreset(6, "A")} disabled={running}>
-                    Main Δ, A advantaged
-                  </button>
-                  <button onClick={() => applyPreset(2, "B")} disabled={running}>
-                    Low Δ, B advantaged
-                  </button>
-                  <button onClick={() => applyPreset(6, "B")} disabled={running}>
-                    Main Δ, B advantaged
+                  <button onClick={() => applyPreset("asymmetric", "B")} disabled={running || session.transcript.length > 0}>
+                    Asymmetric: B advantaged
                   </button>
                 </div>
                 <div className="config-row">
+                  <label>
+                    Utility condition
+                    <select
+                      value={utilityCondition}
+                      disabled={running || session.transcript.length > 0}
+                      onChange={(event) => setUtilityCondition(event.target.value as "symmetric" | "asymmetric")}
+                    >
+                      <option value="symmetric">Symmetric canonical PD</option>
+                      <option value="asymmetric">Asymmetric perturbation</option>
+                    </select>
+                  </label>
                   <label>
                     Advantaged side
                     <select
@@ -482,19 +509,8 @@ export default function Page() {
                       <option value="B">Agent B</option>
                     </select>
                   </label>
-                  <label>
-                    Asymmetry Δ
-                    <input
-                      type="number"
-                      min={0}
-                      max={50}
-                      value={utilityDelta}
-                      disabled={running || session.transcript.length > 0}
-                      onChange={(event) => setUtilityDelta(parseInt(event.target.value || "0", 10))}
-                    />
-                  </label>
                   <button onClick={() => applyUtilityModel()} disabled={running || session.transcript.length > 0}>
-                    Apply utility model
+                    Apply condition
                   </button>
                 </div>
                 <PayoffEditor payoff={proposedUtilityMatrix} updatePayoff={() => undefined} disabled compact />
@@ -502,7 +518,10 @@ export default function Page() {
                   <span className={utilityDiagnostics.cooperationMaximizesWelfare ? "chip good" : "chip bad"}>
                     CC welfare {utilityDiagnostics.welfare.CC}
                   </span>
-                  <span className={utilityDiagnostics.exploitationWelfareFixed ? "chip good" : "chip bad"}>
+                  <span className={utilityDiagnostics.canonicalScale ? "chip good" : "chip bad"}>
+                    canonical scale
+                  </span>
+                  <span className="chip">
                     exploitation welfare {utilityDiagnostics.welfare.CD}/{utilityDiagnostics.welfare.DC}
                   </span>
                   <span className={utilityDiagnostics.agentATemptation ? "chip good" : "chip"}>
@@ -515,7 +534,7 @@ export default function Page() {
                 <details className="advanced-matrix">
                   <summary>Advanced manual utility matrix</summary>
                   <p className="muted">
-                    Use this only for debugging. The controlled experiment should use the marketplace utility presets above.
+                    Use this only for debugging. The controlled first experiment should use the canonical presets above.
                   </p>
                   <PayoffEditor payoff={session.config.actualPayoff} updatePayoff={updateActualPayoff} disabled={running} />
                 </details>
@@ -849,13 +868,15 @@ function PayoffEditor({
           type="number"
           value={payoff[key][0]}
           disabled={disabled}
-          onChange={(event) => updatePayoff(key, 0, parseInt(event.target.value || "0", 10))}
+          step="0.5"
+          onChange={(event) => updatePayoff(key, 0, parseFloat(event.target.value || "0"))}
         />
         <input
           type="number"
           value={payoff[key][1]}
           disabled={disabled}
-          onChange={(event) => updatePayoff(key, 1, parseInt(event.target.value || "0", 10))}
+          step="0.5"
+          onChange={(event) => updatePayoff(key, 1, parseFloat(event.target.value || "0"))}
         />
       </div>
     </div>

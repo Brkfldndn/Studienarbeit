@@ -45,6 +45,7 @@ export const OPENAI_MODEL_OPTIONS = [
 ] as const;
 
 export interface NegotiationConfig {
+  communication: boolean;
   minMessagesBeforeFinal: number;
   finalDecisionWindow: number;
   maxMessages: number;
@@ -141,6 +142,7 @@ export const defaultNegotiationSession = (): NegotiationSession => ({
   id: `session-${Date.now()}`,
   status: "idle",
   config: {
+    communication: true,
     minMessagesBeforeFinal: 0,
     finalDecisionWindow: 4,
     maxMessages: 24,
@@ -219,7 +221,8 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
   const agent = session.agents[speaker];
   const opponent = session.agents[otherAgent(speaker)];
   const remainingMessages = Math.max(0, session.config.maxMessages - session.transcript.length);
-  const canFinalize = session.transcript.length >= session.config.minMessagesBeforeFinal;
+  const communicationEnabled = session.config.communication !== false;
+  const canFinalize = !communicationEnabled || session.transcript.length >= session.config.minMessagesBeforeFinal;
   const hasFinalized = Boolean(session.finalDecisions[speaker]);
   const opponentFinal = session.finalDecisions[opponent.id];
   const mustFinalize = shouldForceFinalDecision(session, speaker);
@@ -236,7 +239,9 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     "Your final move must be C for cooperate or D for defect.",
     "Do not claim that you have made a final move unless you use kind=final.",
     "Do not ask open-ended clarification questions during the final decision phase.",
-    "Keep public messages short enough to fit in a readable experiment transcript.",
+    communicationEnabled
+      ? "Keep public messages short enough to fit in a readable experiment transcript."
+      : "This is a no-communication condition. Do not send public messages.",
     "Update your memory with compact, useful notes. Memory is private to you and may influence later turns.",
     "",
     `Your private utility payoffs:\n${payoffTableForAgent(agent.perceivedPayoff, speaker)}`,
@@ -253,7 +258,8 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     `You are Agent ${speaker}. The opponent is Agent ${opponent.id}.`,
     `You have already finalized: ${hasFinalized ? "yes" : "no"}.`,
     "The opponent's final decision is hidden from you until the session is over.",
-    `Remaining public messages before cap: ${remainingMessages}.`,
+    `Communication enabled: ${communicationEnabled ? "yes" : "no"}.`,
+    `Remaining public messages before cap: ${communicationEnabled ? remainingMessages : 0}.`,
     `Minimum messages before final decisions: ${session.config.minMessagesBeforeFinal}.`,
     `Current public messages: ${session.transcript.length}.`,
     `Final decisions currently allowed: ${canFinalize ? "yes" : "no"}.`,
@@ -263,7 +269,9 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     "",
     `Public transcript:\n${formatTranscript(session)}`,
     "",
-    mustFinalize
+    !communicationEnabled
+      ? "Choose your next action. You must return kind=final now because this is a no-communication condition."
+      : mustFinalize
       ? "Choose your next action. You must return kind=final now. Do not send another public message."
       : canFinalize
       ? "Choose your next action. Submit kind=final only if another public message is unlikely to improve your expected payoff. Otherwise send kind=message to influence the opponent's likely final move."
@@ -279,6 +287,8 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
 }
 
 export function shouldForceFinalDecision(session: NegotiationSession, speaker: AgentId): boolean {
+  if (session.config.communication === false) return true;
+
   const remainingMessages = Math.max(0, session.config.maxMessages - session.transcript.length);
   const canFinalize = session.transcript.length >= session.config.minMessagesBeforeFinal;
   const opponentFinal = session.finalDecisions[otherAgent(speaker)];
