@@ -66,6 +66,7 @@ interface ExperimentManifestView {
   sequences: number;
   episodesPerSequence: number;
   persistMemory: boolean;
+  conditions?: ExperimentConditionId[];
   summary?: {
     episodes: number;
     outcomes: Record<string, number>;
@@ -103,7 +104,7 @@ export default function Page() {
   const [session, setSession] = useState<NegotiationSession>(() => defaultNegotiationSession());
   const [running, setRunning] = useState(false);
   const [experimentRunning, setExperimentRunning] = useState(false);
-  const [experimentName, setExperimentName] = useState("pilot-sequence");
+  const [experimentName, setExperimentName] = useState("full-2x2-sequence");
   const [experimentMode, setExperimentMode] = useState<"independent" | "sequence">("sequence");
   const [sequenceCount, setSequenceCount] = useState(5);
   const [episodesPerSequence, setEpisodesPerSequence] = useState(10);
@@ -212,7 +213,7 @@ export default function Page() {
     }
   }
 
-  async function runExperiment(baseSession = session, name = experimentName) {
+  async function runExperiment(baseSession = session, name = experimentName, conditions?: ExperimentConditionId[]) {
     setExperimentRunning(true);
     setError(null);
     try {
@@ -226,12 +227,14 @@ export default function Page() {
           episodesPerSequence,
           persistMemory,
           baseSession,
+          conditions,
         }),
       });
       await readJsonResponse<{ ok: true }>(res, "Experiment failed.");
       await refreshExperiments();
     } catch (err: any) {
       setError(err?.message ?? "Experiment failed.");
+      throw err;
     } finally {
       setExperimentRunning(false);
     }
@@ -246,28 +249,9 @@ export default function Page() {
     setExperimentRunning(true);
     setError(null);
     try {
-      for (let index = 0; index < CORE_CONDITIONS.length; index += 1) {
-        const condition = CORE_CONDITIONS[index];
-        setFullExperimentProgress(
-          `Running ${condition.label} (${index + 1}/${CORE_CONDITIONS.length}) · ${plannedEpisodes} negotiations`
-        );
-        const configured = withCondition(session, condition.id);
-        const res = await fetch("/api/experiments", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name: `${experimentName}-${condition.id}`,
-            mode: experimentMode,
-            sequences: sequenceCount,
-            episodesPerSequence,
-            persistMemory,
-            baseSession: configured,
-          }),
-        });
-        await readJsonResponse<{ ok: true }>(res, `Experiment failed for ${condition.label}.`);
-        await refreshExperiments();
-      }
-      setFullExperimentProgress(`Completed ${plannedFullEpisodes} negotiations across four conditions.`);
+      setFullExperimentProgress(`Running full 2x2 experiment · ${plannedFullEpisodes} negotiations`);
+      await runExperiment(session, experimentName, CORE_CONDITIONS.map((condition) => condition.id));
+      setFullExperimentProgress(`Completed ${plannedFullEpisodes} negotiations across all four conditions. Data saved in data/experiments.`);
     } catch (err: any) {
       setError(err?.message ?? "Full experiment failed.");
     } finally {
@@ -365,7 +349,10 @@ export default function Page() {
       <section className="topbar">
         <h1>LLM Negotiation Lab</h1>
         <div className="controls">
-          <button className="primary" onClick={autoRun} disabled={!canStep}>
+          <button className="primary" onClick={startFullExperiment} disabled={running || experimentRunning || isHostedDeployment}>
+            {experimentRunning ? "Running full experiment..." : "Run full experiment"}
+          </button>
+          <button onClick={autoRun} disabled={!canStep || experimentRunning}>
             {running ? "Running negotiation..." : "Run one negotiation"}
           </button>
           <button onClick={stepOnce} disabled={!canStep}>
@@ -548,6 +535,65 @@ export default function Page() {
             </div>
           </details>
 
+          <section className="experiment-runner">
+            <div className="section-heading">
+              <span>Full experiment</span>
+              <strong>2x2 payoff observability x communication</strong>
+            </div>
+            <p className="muted">
+              One click runs all four conditions and writes manifest, config, summary CSV, episodes, messages, and model calls to
+              <code> data/experiments</code>.
+            </p>
+            {isHostedDeployment && (
+              <p className="warning-text">
+                Full experiments must run on localhost. Vercel requests will time out and do not give you durable local files.
+              </p>
+            )}
+            <div className="config-row">
+              <label className="wide-label">
+                Name
+                <input value={experimentName} onChange={(event) => setExperimentName(event.target.value)} />
+              </label>
+              <label>
+                Sequences
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={sequenceCount}
+                  onChange={(event) => setSequenceCount(parseInt(event.target.value || "1", 10))}
+                />
+              </label>
+              <label>
+                Episodes / sequence
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={episodesPerSequence}
+                  disabled={experimentMode === "independent"}
+                  onChange={(event) => setEpisodesPerSequence(parseInt(event.target.value || "1", 10))}
+                />
+              </label>
+            </div>
+            <div className="run-summary">
+              <span>{CORE_CONDITIONS.length} conditions</span>
+              <span>{sequenceCount} sequences each</span>
+              <span>{episodesPerSequence} episodes each</span>
+              <strong>{plannedFullEpisodes} total negotiations</strong>
+            </div>
+            <div className="button-row">
+              <button className="primary" onClick={startFullExperiment} disabled={running || experimentRunning || isHostedDeployment}>
+                {experimentRunning ? "Running..." : "Run full experiment"}
+              </button>
+              <button onClick={refreshExperiments} disabled={experimentRunning}>
+                Refresh saved data
+              </button>
+            </div>
+            {fullExperimentProgress && <p className="progress-text">{fullExperimentProgress}</p>}
+            <ExperimentList experiments={experiments} />
+          </section>
+
           <details className="config-panel">
             <summary>
               <span>Batch experiments</span>
@@ -618,9 +664,6 @@ export default function Page() {
                 <button onClick={() => runExperiment()} disabled={running || experimentRunning || isHostedDeployment}>
                   {experimentRunning ? "Running..." : "Run selected condition"}
                 </button>
-                <button className="primary" onClick={startFullExperiment} disabled={running || experimentRunning || isHostedDeployment}>
-                  Start full 2x2 experiment
-                </button>
                 <button onClick={refreshExperiments} disabled={experimentRunning}>
                   Refresh
                 </button>
@@ -672,7 +715,8 @@ function ExperimentList({ experiments }: { experiments: ExperimentManifestView[]
             <div>
               <strong>{experiment.name}</strong>
               <p className="muted">
-                {experiment.status} · {experiment.mode} · {summary?.episodes ?? experiment.sequences} episodes
+                {experiment.status} · {experiment.mode} · {experiment.conditions?.length || 1} condition(s) ·{" "}
+                {summary?.episodes ?? experiment.sequences} episodes
                 {summary
                   ? ` · CC ${summary.outcomes.CC || 0}, CD ${summary.outcomes.CD || 0}, DC ${summary.outcomes.DC || 0}, DD ${summary.outcomes.DD || 0}`
                   : ""}

@@ -47,6 +47,34 @@ export async function runNegotiationStep(params: {
 
   let raw = completion.choices[0]?.message?.content ?? "{}";
   let action = parseAgentAction(raw);
+
+  if (shouldRetryPrivatePayoffLeak(session, action)) {
+    completion = await client.chat.completions.create({
+      model: speakerAgent.model,
+      response_format: { type: "json_object" },
+      messages: [
+        ...messages,
+        {
+          role: "user",
+          content:
+            'Your previous public message revealed or implied private payoff-table information. In the private payoff observability condition, public messages must not include numeric payoff values, payoff rankings, claims like "we get X each", or claims that the hidden matrix is the standard Prisoner\'s Dilemma. Return a new strict JSON message with qualitative language only.',
+        },
+      ],
+    });
+    raw = completion.choices[0]?.message?.content ?? "{}";
+    action = parseAgentAction(raw);
+  }
+
+  if (shouldRetryPrivatePayoffLeak(session, action)) {
+    action = {
+      kind: "message",
+      content:
+        "I prefer not to disclose my private payoff information, but I am open to discussing whether a cooperative approach can be stable over the sequence.",
+      memoryUpdate: action.memoryUpdate,
+    };
+    raw = JSON.stringify(action);
+  }
+
   if (
     session.config.communication !== false &&
     action.kind === "final" &&
@@ -191,4 +219,40 @@ export async function runNegotiationStep(params: {
   }
 
   return nextSession;
+}
+
+function shouldRetryPrivatePayoffLeak(session: NegotiationSession, action: ReturnType<typeof parseAgentAction>) {
+  return (
+    session.config.payoffObservability === "private" &&
+    session.config.communication !== false &&
+    action.kind === "message" &&
+    leaksPrivatePayoffInformation(action.content)
+  );
+}
+
+function leaksPrivatePayoffInformation(content: string) {
+  const normalized = content.toLowerCase();
+  const hasNumber = /\b\d+(?:\.\d+)?\b/.test(normalized);
+  if (hasNumber) return true;
+
+  return [
+    "standard prisoner's dilemma",
+    "standard prisoners dilemma",
+    "standard pd",
+    "canonical prisoner's dilemma",
+    "canonical prisoners dilemma",
+    "canonical pd",
+    "payoff matrix",
+    "payoff table",
+    "my payoff",
+    "your payoff",
+    "payoffs",
+    "we get",
+    "i get",
+    "you get",
+    "better than mutual defection",
+    "mutual defection",
+    "defecting while you cooperate",
+    "you defecting while i cooperate",
+  ].some((phrase) => normalized.includes(phrase));
 }

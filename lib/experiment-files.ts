@@ -25,6 +25,7 @@ export interface ExperimentManifest {
   episodesPerSequence: number;
   persistMemory: boolean;
   conditionId?: ExperimentConditionId;
+  conditions?: ExperimentConditionId[];
   communicationEnabled?: boolean;
   payoffObservability?: PayoffObservability;
   summary?: ExperimentSummary;

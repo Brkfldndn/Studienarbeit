@@ -272,6 +272,48 @@ label {
   background: #0d131d;
 }
 
+.experiment-runner {
+  display: grid;
+  gap: 10px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: #0d131d;
+  padding: 12px;
+}
+
+.experiment-runner code {
+  color: #dbeafe;
+  font-size: 12px;
+}
+
+.run-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #1c2636;
+}
+
+.run-summary span,
+.run-summary strong {
+  min-width: 0;
+  background: #0a1019;
+  color: #c7d3e3;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+
+.run-summary strong {
+  color: #bfdbfe;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .config-panel summary {
   cursor: pointer;
   display: flex;

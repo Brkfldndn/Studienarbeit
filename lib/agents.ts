@@ -234,6 +234,11 @@ function payoffInformationForAgent(session: NegotiationSession, speaker: AgentId
   return [
     "Payoff observability condition: private.",
     "You observe only your own payoff table. The other agent has its own private payoff function, which you cannot inspect. It may or may not be identical to yours.",
+    "The counterpart cannot observe your payoff table, and you cannot observe theirs.",
+    "Do not state, quote, summarize, or imply your numeric payoff values in public messages.",
+    "Do not say that a specific outcome gives a specific payoff, such as 'we get X each' or 'I get X if...'.",
+    "Do not claim or imply that the hidden payoff structure is the standard Prisoner's Dilemma matrix. You do not know the other agent's payoff table.",
+    "You may discuss preferences, trust, cooperation, risk, and future behavior in qualitative terms only.",
     "Your own payoff table:",
     payoffTableForAgent(session.config.actualPayoff, speaker),
   ].join("\n");
@@ -283,6 +288,9 @@ export function buildAgentMessages(session: NegotiationSession, speaker: AgentId
     communicationEnabled
       ? "Keep public messages short enough to fit in a readable experiment transcript."
       : "This is a no-communication condition. Do not send public messages.",
+    session.config.payoffObservability === "private" && communicationEnabled
+      ? "Private-observability public-message rule: never disclose numeric payoff values, payoff-table entries, payoff rankings, or claims that the hidden matrix is the standard Prisoner's Dilemma. Keep public messages qualitative."
+      : "",
     "Update your memory with compact, useful notes. Memory is private to you and may influence later turns.",
     "",
     payoffInformationForAgent(session, speaker),
