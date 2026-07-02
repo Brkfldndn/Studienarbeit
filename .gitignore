@@ -10,7 +10,13 @@ Library/
 .tools/
 output/
 tmp/
-paper/
+paper/*
+!paper/payoff_opacity_llm_price_coordination.tex
+!paper/payoff_opacity_llm_price_coordination.pdf
+!paper/references.bib
+!paper/figures/
+paper/figures/*
+!paper/figures/agent_setup_sequence.png
 
 # experiment data: ignore all runs except the two reported in the paper
 data/experiments/*
