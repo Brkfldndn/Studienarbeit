@@ -129,6 +129,18 @@ label {
   flex-wrap: wrap;
 }
 
+.scenario-select {
+  min-width: 190px;
+  grid-template-columns: auto minmax(150px, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.scenario-select select {
+  height: 32px;
+  padding-block: 4px;
+}
+
 .toast {
   position: fixed;
   top: 54px;
@@ -314,6 +326,28 @@ label {
   gap: 8px;
 }
 
+.saved-run {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #14532d;
+  border-radius: 7px;
+  background: #07150d;
+  padding: 9px;
+}
+
+.saved-run strong {
+  color: #86efac;
+  font-size: 13px;
+}
+
+.saved-run span {
+  overflow: hidden;
+  color: #c7d3e3;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .config-panel summary {
   cursor: pointer;
   display: flex;
@@ -360,6 +394,31 @@ label {
   border-radius: 8px;
   background: #0d131d;
   padding: 12px;
+}
+
+.treatment-card summary,
+.experiment-runner summary,
+.agent-card summary,
+.panel-section summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.treatment-card summary::-webkit-details-marker,
+.experiment-runner summary::-webkit-details-marker,
+.agent-card summary::-webkit-details-marker,
+.panel-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.treatment-card:not([open]),
+.experiment-runner:not([open]) {
+  gap: 0;
+}
+
+.agent-card:not([open]),
+.panel-section:not([open]) {
+  padding-bottom: 10px;
 }
 
 .compact-card {
@@ -596,8 +655,7 @@ label {
   background: #21141b;
 }
 
-.bubble p,
-.final-card p {
+.bubble p {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -643,7 +701,11 @@ label {
 }
 
 .final-card p {
-  -webkit-line-clamp: 2;
+  margin: 0;
+  color: #dbe6f7;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-wrap;
 }
 
 .badge {
@@ -681,25 +743,208 @@ label {
   gap: 10px;
 }
 
-.memory p,
-.memory li {
+.memory pre {
+  margin: 0;
+  color: #c7d3e3;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.memory p {
   color: #c7d3e3;
   font-size: 12px;
 }
 
-.memory-list {
-  display: grid;
-  gap: 4px;
+/* Light experiment workspace */
+html,
+body {
+  background: #f5f7fb;
+  color: #172033;
 }
 
-.memory-list strong {
-  font-size: 12px;
-  color: #91a1b8;
+button {
+  border-color: #d5deea;
+  background: #ffffff;
+  color: #1f2937;
 }
 
-.memory-list ul {
-  margin: 0;
-  padding-left: 17px;
+button:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: #f8fbff;
+}
+
+button.primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+input,
+select,
+textarea {
+  border-color: #ccd6e3;
+  background: #ffffff;
+  color: #172033;
+}
+
+label,
+.muted,
+.metric span,
+.section-heading span,
+.bubble-meta,
+.payoff-cell span {
+  color: #667085;
+}
+
+.topbar,
+.agent-stack,
+.agent-pair,
+.agent-card,
+.panel-section,
+.experiment-item,
+.utility-model,
+.advanced-matrix {
+  border-color: #dbe3ef;
+}
+
+.toast {
+  border-color: #93c5fd;
+  background: rgba(239, 246, 255, 0.98);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16);
+  color: #1e3a8a;
+}
+
+.error {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.status-grid,
+.run-summary,
+.segmented {
+  background: #dbe3ef;
+}
+
+.metric,
+.treatment-card,
+.config-panel,
+.experiment-runner,
+.conversation,
+.run-summary span,
+.run-summary strong,
+.final-card,
+.agent-card,
+.panel-section {
+  background: #ffffff;
+}
+
+.section-heading strong,
+.metric strong,
+.memory pre,
+.memory p,
+.final-card p,
+.saved-run span,
+.run-summary span {
+  color: #172033;
+}
+
+.run-summary strong,
+.experiment-runner code,
+.advanced-matrix summary,
+.experiment-links a {
+  color: #1d4ed8;
+}
+
+.config-content {
+  border-color: #dbe3ef;
+}
+
+.segmented button {
+  background: #ffffff;
+  color: #667085;
+}
+
+.segmented button.selected {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.chip {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.chip.good {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.chip.bad {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.saved-run {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.saved-run strong {
+  color: #166534;
+}
+
+.warning-text {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.progress-text {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.conversation {
+  border-color: #dbe3ef;
+}
+
+.bubble {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+}
+
+.bubble.right {
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+
+.empty {
+  color: #667085;
+}
+
+.badge.coop {
+  border-color: #86efac;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge.def {
+  border-color: #fecdd3;
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.pulse {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 @media (max-width: 1120px) {

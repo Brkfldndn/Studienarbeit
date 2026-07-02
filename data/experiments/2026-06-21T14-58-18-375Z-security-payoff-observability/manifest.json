@@ -1,0 +1,32 @@
+{
+  "id": "2026-06-21T14-58-18-375Z-security-payoff-observability",
+  "name": "security-payoff-observability",
+  "mode": "sequence",
+  "createdAt": "2026-06-21T14:58:18.375Z",
+  "status": "completed",
+  "sequences": 30,
+  "episodesPerSequence": 10,
+  "persistMemory": false,
+  "conditions": [
+    "public_communication",
+    "private_communication"
+  ],
+  "completedAt": "2026-06-21T19:10:57.951Z",
+  "summary": {
+    "episodes": 600,
+    "sequences": 60,
+    "outcomes": {
+      "CC": 508,
+      "CD": 57,
+      "DC": 31,
+      "DD": 4,
+      "unfinished": 0
+    },
+    "cooperationA": 0.9416666666666667,
+    "cooperationB": 0.8983333333333333,
+    "averagePayoffA": 2.805,
+    "averagePayoffB": 3.0216666666666665,
+    "averageWelfare": 5.826666666666667,
+    "totalTokens": 3310297
+  }
+}

@@ -1,9 +1,18 @@
 node_modules
 .npm-cache
 .next
+.next-broken*
 .env.local
 .env
 *.log
 .DS_Store
-data/experiments
+Library/
+.tools/
+output/
+tmp/
 paper/
+
+# experiment data: ignore all runs except the two reported in the paper
+data/experiments/*
+!data/experiments/2026-06-21T14-58-18-375Z-security-payoff-observability/
+!data/experiments/2026-06-30T11-36-17-180Z-security-payoff-observability/

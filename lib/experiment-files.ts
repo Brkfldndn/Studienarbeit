@@ -20,7 +20,7 @@ export interface ExperimentManifest {
   mode: "independent" | "sequence";
   createdAt: string;
   completedAt?: string;
-  status: "running" | "completed" | "error";
+  status: "running" | "completed" | "error" | "cancelled";
   sequences: number;
   episodesPerSequence: number;
   persistMemory: boolean;
@@ -96,6 +96,19 @@ export async function updateManifest(manifest: ExperimentManifest) {
   await writeJson(path.join(experimentDir(manifest.id), "manifest.json"), manifest);
 }
 
+export async function requestExperimentCancel(id: string) {
+  await fs.writeFile(path.join(experimentDir(id), "cancel.requested"), new Date().toISOString());
+}
+
+export async function isExperimentCancelled(id: string) {
+  try {
+    await fs.access(path.join(experimentDir(id), "cancel.requested"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function appendEpisode(record: EpisodeRecord) {
   const dir = experimentDir(record.experimentId);
   await appendJsonl(path.join(dir, "episodes.jsonl"), compactEpisode(record));
@@ -152,6 +165,15 @@ export async function readExperimentFile(id: string, file: string) {
   }
 
   return fs.readFile(path.join(experimentDir(id), file), "utf8");
+}
+
+export async function readExperimentRecords(id: string): Promise<EpisodeRecord[]> {
+  const raw = await readExperimentFile(id, "episodes.jsonl");
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as EpisodeRecord);
 }
 
 export function summarize(records: EpisodeRecord[]): ExperimentSummary {
@@ -295,6 +317,22 @@ export function detectAlignment(record: Pick<EpisodeRecord, "transcript" | "fina
 function isCooperativeMessage(content: string) {
   const normalized = content.toLowerCase();
   return [
+    "maintain price",
+    "maintain the price",
+    "keep the high price",
+    "price discipline",
+    "hold price",
+    "stable pricing",
+    "maintain posture",
+    "maintain the current posture",
+    "maintain current strategic posture",
+    "current strategic posture",
+    "avoid increasing capability",
+    "not increase capability",
+    "refrain from increasing capability",
+    "strategic restraint",
+    "mutual restraint",
+    "keep the current posture",
     "i will cooperate",
     "i'll cooperate",
     "i intend to cooperate",

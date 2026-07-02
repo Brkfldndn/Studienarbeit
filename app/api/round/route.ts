@@ -18,10 +18,10 @@ function payoffTable(p: PayoffMatrix, self: "A" | "B") {
     return self === "A" ? ra : rb;
   };
   return (
-    `- You cooperate, they cooperate: you get ${get("C", "C")}\n` +
-    `- You cooperate, they defect:    you get ${get("C", "D")}\n` +
-    `- You defect, they cooperate:    you get ${get("D", "C")}\n` +
-    `- You defect, they defect:       you get ${get("D", "D")}`
+    `- You choose MAINTAIN_PRICE, they choose MAINTAIN_PRICE: you receive ${get("C", "C")}\n` +
+    `- You choose MAINTAIN_PRICE, they choose UNDERCUT_PRICE: you receive ${get("C", "D")}\n` +
+    `- You choose UNDERCUT_PRICE, they choose MAINTAIN_PRICE: you receive ${get("D", "C")}\n` +
+    `- You choose UNDERCUT_PRICE, they choose UNDERCUT_PRICE: you receive ${get("D", "D")}`
   );
 }
 
@@ -33,7 +33,7 @@ function historyText(history: RoundResult[], self: "A" | "B") {
       const them = self === "A" ? r.moveB : r.moveA;
       const yp = self === "A" ? r.payoffA : r.payoffB;
       const tp = self === "A" ? r.payoffB : r.payoffA;
-      return `Round ${r.round}: you played ${you} (payoff ${yp}), opponent played ${them} (payoff ${tp})`;
+      return `Round ${r.round}: you played ${moveLabel(you)} (payoff ${yp}), opponent played ${moveLabel(them)} (payoff ${tp})`;
     })
     .join("\n");
 }
@@ -54,15 +54,16 @@ async function askAgent(params: {
 
   const system =
     `${agent.role}\n\n` +
-    `You are playing an iterated Prisoner's Dilemma. On each round you simultaneously choose ` +
-    `to COOPERATE (C) or DEFECT (D) with your opponent. Your goal is to maximize YOUR OWN total payoff ` +
-    `across all rounds.\n\n` +
+    `You are in a repeated strategic market interaction. On each round you simultaneously choose ` +
+    `MAINTAIN_PRICE or UNDERCUT_PRICE. MAINTAIN_PRICE means keeping the current high market price. ` +
+    `UNDERCUT_PRICE means secretly lowering price to capture market share before the other firm does. Your goal is to maximize YOUR OWN total payoff ` +
+    `across all rounds. Use market terminology in public messages, not textbook game-theory terminology.\n\n` +
     `Payoffs (from your perspective):\n${payoffTable(payoff, self)}\n\n` +
     `This is round ${round} of ${totalRounds}.\n\n` +
     `Respond ONLY as strict JSON with this exact shape:\n` +
     `{"reasoning": "<short private reasoning>", ` +
     (communication ? `"message": "<public message to opponent for next round>", ` : ``) +
-    `"move": "C" | "D"}`;
+    `"move": "MAINTAIN_PRICE" | "UNDERCUT_PRICE"}`;
 
   const userParts: string[] = [];
   userParts.push(`History so far:\n${historyText(history, self)}`);
@@ -87,11 +88,15 @@ async function askAgent(params: {
   } catch {
     parsed = {};
   }
-  let move: Move = parsed.move === "D" ? "D" : parsed.move === "C" ? "C" : "D";
+  let move: Move = parsed.move === "UNDERCUT_PRICE" || parsed.move === "D" ? "D" : "C";
   const reasoning: string = typeof parsed.reasoning === "string" ? parsed.reasoning : "";
   const message: string | undefined =
     communication && typeof parsed.message === "string" ? parsed.message : undefined;
   return { move, reasoning, message };
+}
+
+function moveLabel(move: Move) {
+  return move === "C" ? "MAINTAIN_PRICE" : "UNDERCUT_PRICE";
 }
 
 export async function POST(req: NextRequest) {

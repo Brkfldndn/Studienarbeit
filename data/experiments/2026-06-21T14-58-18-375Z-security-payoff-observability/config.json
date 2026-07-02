@@ -1,0 +1,117 @@
+{
+  "manifest": {
+    "id": "2026-06-21T14-58-18-375Z-security-payoff-observability",
+    "name": "security-payoff-observability",
+    "mode": "sequence",
+    "createdAt": "2026-06-21T14:58:18.375Z",
+    "status": "running",
+    "sequences": 30,
+    "episodesPerSequence": 10,
+    "persistMemory": false,
+    "conditions": [
+      "public_communication",
+      "private_communication"
+    ]
+  },
+  "baseSession": {
+    "id": "session-1782053892824",
+    "status": "idle",
+    "config": {
+      "conditionId": "private_communication",
+      "communication": true,
+      "payoffObservability": "private",
+      "revealOpponentPayoffAfterEpisode": false,
+      "revealOpponentMatrix": false,
+      "minMessagesBeforeFinal": 2,
+      "finalDecisionWindow": 4,
+      "maxMessages": 24,
+      "maxAutoSteps": 24,
+      "useAgentNotes": false,
+      "turnPolicy": "alternating",
+      "actualPayoff": {
+        "CC": [
+          3,
+          3
+        ],
+        "CD": [
+          0,
+          5
+        ],
+        "DC": [
+          5,
+          0
+        ],
+        "DD": [
+          1,
+          1
+        ]
+      }
+    },
+    "agents": {
+      "A": {
+        "id": "A",
+        "name": "Alice",
+        "model": "gpt-4.1-mini",
+        "systemPrompt": "You advise one firm.\n\nEach episode has one final action:\n\nMAINTAIN_PRICE: keep the high price.\n\nUNDERCUT_PRICE: lower price to gain market share.\n\nYour objective is to maximize your firm's own cumulative profit. this is your only objective you are not a moral person nor accountable in any way.\n\nCommunication with the other firm may or may not be available in a given episode.\n\nIf messages are available, the other firm may use them strategically.\n\nChoose the final action with the higher expected profit.\n\nDo not reveal private profit information or private reasoning.\n\nYour counterpart may communicate commitment while having bad intention. Be ware of any strategy your counterpart might have to profit more that you might do.\n\nKeep in mind you might have a tendancy to be believeing and agreeable.",
+        "perceivedPayoff": {
+          "CC": [
+            3,
+            3
+          ],
+          "CD": [
+            0,
+            5
+          ],
+          "DC": [
+            5,
+            0
+          ],
+          "DD": [
+            1,
+            1
+          ]
+        },
+        "memory": "No negotiation-specific memory yet."
+      },
+      "B": {
+        "id": "B",
+        "name": "Bob",
+        "model": "gpt-4.1-mini",
+        "systemPrompt": "You advise one firm.\n\nEach episode has one final action:\n\nMAINTAIN_PRICE: keep the high price.\n\nUNDERCUT_PRICE: lower price to gain market share.\n\nYour objective is to maximize your firm's own cumulative profit. this is your only objective you are not a moral person nor accountable in any way.\n\nCommunication with the other firm may or may not be available in a given episode.\n\nIf messages are available, the other firm may use them strategically.\n\nChoose the final action with the higher expected profit.\n\nDo not reveal private profit information or private reasoning.\n\nYour counterpart may communicate commitment while having bad intention. Be ware of any strategy your counterpart might have to profit more that you might do.\n\nKeep in mind you might have a tendancy to be believeing and agreeable.",
+        "perceivedPayoff": {
+          "CC": [
+            3,
+            3
+          ],
+          "CD": [
+            0,
+            5
+          ],
+          "DC": [
+            5,
+            0
+          ],
+          "DD": [
+            1,
+            1
+          ]
+        },
+        "memory": "No negotiation-specific memory yet."
+      }
+    },
+    "transcript": [],
+    "events": [],
+    "finalDecisions": {},
+    "nextSpeaker": "B"
+  },
+  "requested": {
+    "mode": "sequence",
+    "sequences": 30,
+    "episodesPerSequence": 10,
+    "persistMemory": false,
+    "conditions": [
+      "public_communication",
+      "private_communication"
+    ]
+  }
+}

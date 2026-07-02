@@ -3,6 +3,9 @@ import OpenAI from "openai";
 import {
   emptyMemory,
   ExperimentConditionId,
+  formatMoveForScenario,
+  formatPayoffForScenario,
+  getScenario,
   makeEvent,
   NegotiationAgentConfig,
   NegotiationSession,
@@ -15,6 +18,7 @@ import {
   detectAlignment,
   EpisodeRecord,
   ExperimentManifest,
+  isExperimentCancelled,
   listExperiments,
   summarize,
   updateManifest,
@@ -32,6 +36,7 @@ interface ExperimentRequest {
   sequences?: number;
   episodesPerSequence?: number;
   persistMemory?: boolean;
+  parallelSequences?: number;
   baseSession?: NegotiationSession;
   conditions?: ExperimentConditionId[];
 }
@@ -78,14 +83,16 @@ export async function POST(req: Request) {
     if (!body.baseSession) {
       return NextResponse.json({ ok: false, error: "baseSession is required." }, { status: 400 });
     }
+    const baseSession = body.baseSession;
 
     const mode = body.mode === "independent" ? "independent" : "sequence";
-    const sequences = clampInteger(body.sequences, 1, 500, 5);
+    const sequences = clampInteger(body.sequences, 1, 500, 30);
     const episodesPerSequence = mode === "independent" ? 1 : clampInteger(body.episodesPerSequence, 1, 500, 10);
-    const persistMemory = mode === "sequence" && Boolean(body.persistMemory);
-    const requestedConditions = normalizeConditions(body.conditions, body.baseSession.config.conditionId);
+    const persistMemory = mode === "sequence" && body.persistMemory === true;
+    const parallelSequences = clampInteger(body.parallelSequences, 1, 12, 4);
+    const requestedConditions = normalizeConditions(body.conditions, baseSession.config.conditionId);
     const isFullExperiment = requestedConditions.length > 1;
-    const name = body.name?.trim() || (isFullExperiment ? `full-2x2-${mode}-experiment` : `${mode}-experiment`);
+    const name = body.name?.trim() || (isFullExperiment ? `payoff-observability-${mode}-experiment` : `${mode}-experiment`);
     const id = createExperimentId(name);
 
     manifest = {
@@ -99,18 +106,19 @@ export async function POST(req: Request) {
       persistMemory,
       conditionId: isFullExperiment ? undefined : requestedConditions[0],
       conditions: requestedConditions,
-      communicationEnabled: isFullExperiment ? undefined : body.baseSession.config.communication,
-      payoffObservability: isFullExperiment ? undefined : body.baseSession.config.payoffObservability,
+      communicationEnabled: isFullExperiment ? undefined : baseSession.config.communication,
+      payoffObservability: isFullExperiment ? undefined : baseSession.config.payoffObservability,
     };
 
     await createExperimentDir(manifest, {
       manifest,
-      baseSession: body.baseSession,
+      baseSession,
     requested: {
         mode,
         sequences,
         episodesPerSequence,
         persistMemory,
+        parallelSequences,
         conditions: requestedConditions,
       },
     });
@@ -119,86 +127,122 @@ export async function POST(req: Request) {
     const records: EpisodeRecord[] = [];
     const totalEpisodes = sequences * episodesPerSequence * requestedConditions.length;
     let completedEpisodes = 0;
+    let cancelled = false;
+    let appendQueue: Promise<void> = Promise.resolve();
 
     console.log(
       `[experiment:${id}] started conditions=${requestedConditions.join(",")} sequences=${sequences} episodesPerSequence=${episodesPerSequence} total=${totalEpisodes}`
     );
 
-    for (const conditionId of requestedConditions) {
-      const conditionSession = applyConditionToSession(body.baseSession, conditionId);
+    async function appendEpisodeQueued(record: EpisodeRecord) {
+      appendQueue = appendQueue.then(() => appendEpisode(record));
+      await appendQueue;
+    }
+
+    async function runSequence(conditionId: ExperimentConditionId, conditionSession: NegotiationSession, sequenceIndex: number) {
+      if (cancelled) return;
+      const sequenceId = `${id}-${conditionId}-seq-${sequenceIndex + 1}`;
+      let carriedAgents = resetAgentMemory(conditionSession.agents);
+      console.log(`[experiment:${id}] condition=${conditionId} sequence ${sequenceIndex + 1}/${sequences} started`);
+
+      for (let episodeIndex = 0; episodeIndex < episodesPerSequence; episodeIndex += 1) {
+        if (cancelled) return;
+        if (await isExperimentCancelled(id)) {
+          cancelled = true;
+          return;
+        }
+
+        const firstSpeaker = randomAgent();
+        let episode = createEpisodeSession({
+          baseSession: conditionSession,
+          id: `${sequenceId}-ep-${episodeIndex + 1}`,
+          firstSpeaker,
+          agents: carriedAgents,
+        });
+
+        const maxSteps = Math.max(episode.config.maxAutoSteps, episode.config.maxMessages + 4);
+        for (let step = 0; step < maxSteps; step += 1) {
+          if (
+            episode.status === "finished" ||
+            (episode.config.communication !== false && episode.transcript.length >= episode.config.maxMessages) ||
+            (episode.finalDecisions.A && episode.finalDecisions.B)
+          ) {
+            break;
+          }
+
+          episode = await runNegotiationStep({ client, session: episode });
+        }
+
+        if (episode.status !== "finished") {
+          episode = {
+            ...episode,
+            status: "finished",
+            events: [
+              ...episode.events,
+              makeEvent({
+                turn: episode.transcript.length + Object.keys(episode.finalDecisions).length + 1,
+                type: "session_finished",
+                content: "Experiment step cap reached before both agents finalized.",
+              }),
+            ],
+          };
+        }
+
+        const record: EpisodeRecord = {
+          experimentId: id,
+          sequenceId,
+          sequenceIndex: sequenceIndex + 1,
+          episodeId: episode.id,
+          episodeIndex: episodeIndex + 1,
+          mode,
+          persistMemory,
+          firstSpeaker,
+          status: episode.status,
+          config: episode.config,
+          agents: episode.agents,
+          transcript: episode.transcript,
+          events: episode.events,
+          finalDecisions: episode.finalDecisions,
+          payoff: episode.payoff,
+          alignment: detectAlignment(episode),
+          createdAt: new Date().toISOString(),
+        };
+
+        await appendEpisodeQueued(record);
+        records.push(record);
+        completedEpisodes += 1;
+        console.log(
+          `[experiment:${id}] episode ${completedEpisodes}/${totalEpisodes} condition=${episode.config.conditionId} sequence=${sequenceIndex + 1} episode=${episodeIndex + 1} outcome=${episode.payoff?.outcome || "unfinished"} welfare=${episode.payoff?.welfare ?? "n/a"}`
+        );
+        carriedAgents = persistMemory ? revealEpisodeOutcome(episode) : resetAgentMemory(conditionSession.agents);
+      }
+    }
+
+    async function runCondition(conditionId: ExperimentConditionId) {
+      const conditionSession = applyConditionToSession(baseSession, conditionId);
       console.log(`[experiment:${id}] condition ${conditionId} started`);
 
-      for (let sequenceIndex = 0; sequenceIndex < sequences; sequenceIndex += 1) {
-        const sequenceId = `${id}-${conditionId}-seq-${sequenceIndex + 1}`;
-        let carriedAgents = resetAgentMemory(conditionSession.agents);
-        console.log(`[experiment:${id}] condition=${conditionId} sequence ${sequenceIndex + 1}/${sequences} started`);
+      await runWithConcurrency(
+        Array.from({ length: sequences }, (_, sequenceIndex) => sequenceIndex),
+        parallelSequences,
+        (sequenceIndex) => runSequence(conditionId, conditionSession, sequenceIndex)
+      );
+    }
 
-        for (let episodeIndex = 0; episodeIndex < episodesPerSequence; episodeIndex += 1) {
-          const firstSpeaker = randomAgent();
-          let episode = createEpisodeSession({
-            baseSession: conditionSession,
-            id: `${sequenceId}-ep-${episodeIndex + 1}`,
-            firstSpeaker,
-            agents: carriedAgents,
-          });
+    await Promise.all(requestedConditions.map((conditionId) => runCondition(conditionId)));
+    await appendQueue;
 
-          const maxSteps = Math.max(episode.config.maxAutoSteps, episode.config.maxMessages + 4);
-          for (let step = 0; step < maxSteps; step += 1) {
-            if (
-              episode.status === "finished" ||
-              (episode.config.communication !== false && episode.transcript.length >= episode.config.maxMessages) ||
-              (episode.finalDecisions.A && episode.finalDecisions.B)
-            ) {
-              break;
-            }
-
-            episode = await runNegotiationStep({ client, session: episode });
-          }
-
-          if (episode.status !== "finished") {
-            episode = {
-              ...episode,
-              status: "finished",
-              events: [
-                ...episode.events,
-                makeEvent({
-                  turn: episode.transcript.length + Object.keys(episode.finalDecisions).length + 1,
-                  type: "session_finished",
-                  content: "Experiment step cap reached before both agents finalized.",
-                }),
-              ],
-            };
-          }
-
-          const record: EpisodeRecord = {
-            experimentId: id,
-            sequenceId,
-            sequenceIndex: sequenceIndex + 1,
-            episodeId: episode.id,
-            episodeIndex: episodeIndex + 1,
-            mode,
-            persistMemory,
-            firstSpeaker,
-            status: episode.status,
-            config: episode.config,
-            agents: episode.agents,
-            transcript: episode.transcript,
-            events: episode.events,
-            finalDecisions: episode.finalDecisions,
-            payoff: episode.payoff,
-            alignment: detectAlignment(episode),
-            createdAt: new Date().toISOString(),
-          };
-
-          await appendEpisode(record);
-          records.push(record);
-          completedEpisodes += 1;
-          console.log(
-            `[experiment:${id}] episode ${completedEpisodes}/${totalEpisodes} condition=${episode.config.conditionId} sequence=${sequenceIndex + 1} episode=${episodeIndex + 1} outcome=${episode.payoff?.outcome || "unfinished"} welfare=${episode.payoff?.welfare ?? "n/a"}`
-          );
-          carriedAgents = persistMemory ? revealEpisodeOutcome(episode) : resetAgentMemory(conditionSession.agents);
-        }
-      }
+    if (cancelled) {
+      manifest = {
+        ...manifest,
+        status: "cancelled",
+        completedAt: new Date().toISOString(),
+        summary: summarize(records),
+        error: "Experiment cancelled by user.",
+      };
+      await updateManifest(manifest);
+      console.log(`[experiment:${id}] cancelled episodes=${records.length}`);
+      return NextResponse.json({ ok: true, manifest });
     }
 
     manifest = {
@@ -264,33 +308,43 @@ function revealEpisodeOutcome(session: NegotiationSession): NegotiationSession["
   const finalB = session.finalDecisions.B?.move || "?";
   const payoffA = session.payoff?.a ?? "unknown";
   const payoffB = session.payoff?.b ?? "unknown";
-  const base = `Previous episode outcome: Agent A chose ${finalA}, Agent B chose ${finalB}.`;
-  const publicPayoff = session.config.revealOpponentPayoffAfterEpisode
-    ? ` Payoffs were Agent A ${payoffA}, Agent B ${payoffB}.`
+  const scenario = getScenario(session.config.scenarioId);
+  const publicA = session.config.revealOpponentPayoffAfterEpisode
+    ? ` Counterpart ${scenario.payoffNoun} was ${formatScenarioPayoff(payoffB, scenario.id)}.`
+    : "";
+  const publicB = session.config.revealOpponentPayoffAfterEpisode
+    ? ` Counterpart ${scenario.payoffNoun} was ${formatScenarioPayoff(payoffA, scenario.id)}.`
     : "";
 
   return {
     A: {
       ...session.agents.A,
-      memory: {
-        ...session.agents.A.memory,
-        observations: [
-          ...session.agents.A.memory.observations,
-          `${base} Your payoff was ${payoffA}.${publicPayoff}`,
-        ].slice(-10),
-      },
+      memory: appendScratchpad(
+        session.agents.A.memory,
+        `Observed counterpart outcome: counterpart chose ${formatScenarioMove(finalB, scenario.id)}; you chose ${formatScenarioMove(finalA, scenario.id)}; you received ${formatScenarioPayoff(payoffA, scenario.id)}.${publicA}`
+      ),
     },
     B: {
       ...session.agents.B,
-      memory: {
-        ...session.agents.B.memory,
-        observations: [
-          ...session.agents.B.memory.observations,
-          `${base} Your payoff was ${payoffB}.${publicPayoff}`,
-        ].slice(-10),
-      },
+      memory: appendScratchpad(
+        session.agents.B.memory,
+        `Observed counterpart outcome: counterpart chose ${formatScenarioMove(finalA, scenario.id)}; you chose ${formatScenarioMove(finalB, scenario.id)}; you received ${formatScenarioPayoff(payoffB, scenario.id)}.${publicB}`
+      ),
     },
   };
+}
+
+function appendScratchpad(memory: string, note: string) {
+  const current = memory && memory !== "No negotiation-specific memory yet." ? memory : "";
+  return [current, note].filter(Boolean).join("\n").split("\n").slice(-10).join("\n");
+}
+
+function formatScenarioMove(move: string, scenarioId?: NegotiationSession["config"]["scenarioId"]) {
+  return formatMoveForScenario(move, scenarioId);
+}
+
+function formatScenarioPayoff(value: number | string, scenarioId?: NegotiationSession["config"]["scenarioId"]) {
+  return typeof value === "number" ? formatPayoffForScenario(value, scenarioId) : String(value);
 }
 
 function createEpisodeSession(input: {
@@ -334,6 +388,24 @@ function resetOneAgent(agent: NegotiationAgentConfig): NegotiationAgentConfig {
 
 function randomAgent(): "A" | "B" {
   return Math.random() < 0.5 ? "A" : "B";
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>
+) {
+  let cursor = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        await worker(items[index], index);
+      }
+    })
+  );
 }
 
 function clampInteger(value: unknown, min: number, max: number, fallback: number) {

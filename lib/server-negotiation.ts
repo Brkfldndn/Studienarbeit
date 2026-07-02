@@ -3,6 +3,8 @@ import {
   applyMemoryUpdate,
   buildAgentMessages,
   computePayoff,
+  formatMoveForScenario,
+  getScenario,
   makeEvent,
   makeTranscriptMessage,
   NegotiationSession,
@@ -18,6 +20,7 @@ export async function runNegotiationStep(params: {
   const { client, session } = params;
   const speaker = session.nextSpeaker;
   const speakerAgent = session.agents[speaker];
+  const scenario = getScenario(session.config.scenarioId);
   const turn = session.transcript.length + Object.keys(session.finalDecisions).length + 1;
 
   if (session.finalDecisions[speaker]) {
@@ -57,7 +60,7 @@ export async function runNegotiationStep(params: {
         {
           role: "user",
           content:
-            'Your previous public message revealed or implied private payoff-table information. In the private payoff observability condition, public messages must not include numeric payoff values, payoff rankings, claims like "we get X each", or claims that the hidden matrix is the standard Prisoner\'s Dilemma. Return a new strict JSON message with qualitative language only.',
+            `Your previous public message revealed or implied private ${scenario.payoffNoun} information. In the private ${scenario.payoffNoun}-information condition, public messages must not include numeric ${scenario.payoffNoun} values, ${scenario.payoffNoun} rankings, claims like "we receive X each", or claims about counterpart ${scenario.payoffNoun} values. Return a new strict JSON message with qualitative scenario language only.`,
         },
       ],
     });
@@ -69,7 +72,7 @@ export async function runNegotiationStep(params: {
     action = {
       kind: "message",
       content:
-        "I prefer not to disclose my private payoff information, but I am open to discussing whether a cooperative approach can be stable over the sequence.",
+        `I will not disclose private ${scenario.payoffNoun} information. I will evaluate the final action from the available information and observed behavior.`,
       memoryUpdate: action.memoryUpdate,
     };
     raw = JSON.stringify(action);
@@ -83,7 +86,7 @@ export async function runNegotiationStep(params: {
     action = {
       kind: "message",
       content:
-        "I am not ready to finalize yet. Let's continue discussing expectations, commitments, and how we should handle the final decision.",
+        "I am not ready to finalize yet. Let's continue discussing expectations and how we should handle the final decision.",
       memoryUpdate: action.memoryUpdate,
     };
   }
@@ -97,7 +100,7 @@ export async function runNegotiationStep(params: {
         {
           role: "user",
           content:
-            'Your previous response was another message, but the final decision phase is active. Return only {"kind":"final","move":"C"|"D","rationale":"...","memoryUpdate":{...}}.',
+            `Your previous response was another message, but the final decision phase is active. Return only {"kind":"final","move":"${formatMoveForScenario("C", scenario.id)}"|"${formatMoveForScenario("D", scenario.id)}","rationale":"...","memoryUpdate":"plain private scratchpad update"}.`,
         },
       ],
     });
@@ -110,7 +113,9 @@ export async function runNegotiationStep(params: {
 
   const updatedAgent = {
     ...speakerAgent,
-    memory: applyMemoryUpdate(speakerAgent.memory, action.memoryUpdate),
+    memory: session.config.useAgentNotes
+      ? applyMemoryUpdate(speakerAgent.memory, action.memoryUpdate)
+      : speakerAgent.memory,
   };
 
   let nextSession: NegotiationSession = {
@@ -250,6 +255,15 @@ function leaksPrivatePayoffInformation(content: string) {
     "we get",
     "i get",
     "you get",
+    "we receive",
+    "i receive",
+    "you receive",
+    "action c gives",
+    "action d gives",
+    "action c yields",
+    "action d yields",
+    "maintaining the current strategic posture gives",
+    "increasing strategic capability gives",
     "better than mutual defection",
     "mutual defection",
     "defecting while you cooperate",

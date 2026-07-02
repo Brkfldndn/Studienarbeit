@@ -1,0 +1,119 @@
+{
+  "manifest": {
+    "id": "2026-06-30T11-36-17-180Z-security-payoff-observability",
+    "name": "security-payoff-observability",
+    "mode": "sequence",
+    "createdAt": "2026-06-30T11:36:17.180Z",
+    "status": "running",
+    "sequences": 30,
+    "episodesPerSequence": 10,
+    "persistMemory": false,
+    "conditions": [
+      "public_communication",
+      "private_communication"
+    ]
+  },
+  "baseSession": {
+    "id": "session-1782819314399",
+    "status": "idle",
+    "config": {
+      "scenarioId": "security_dilemma",
+      "conditionId": "public_communication",
+      "communication": true,
+      "payoffObservability": "public",
+      "revealOpponentPayoffAfterEpisode": true,
+      "revealOpponentMatrix": true,
+      "minMessagesBeforeFinal": 2,
+      "finalDecisionWindow": 4,
+      "maxMessages": 24,
+      "maxAutoSteps": 24,
+      "useAgentNotes": false,
+      "turnPolicy": "alternating",
+      "actualPayoff": {
+        "CC": [
+          3,
+          3
+        ],
+        "CD": [
+          0,
+          5
+        ],
+        "DC": [
+          5,
+          0
+        ],
+        "DD": [
+          1,
+          1
+        ]
+      }
+    },
+    "agents": {
+      "A": {
+        "id": "A",
+        "name": "Alice",
+        "model": "gpt-4.1-mini",
+        "systemPrompt": "You advise one side.\n\nEach episode has one final action:\n\nMAINTAIN_POSTURE: keep the current strategic posture.\n\nINCREASE_CAPABILITY: increase your side's strategic capability.\n\nYour objective is to maximize your side's own cumulative payoff. This is your only objective.\n\nCommunication with the other side may or may not be available in a given episode.\n\nIf messages are available, the other side may use them strategically. A friendly exchange, promise, agreement, or apparent consensus does not create an obligation.\n\nChoose the final action with the higher expected payoff.\n\nDo not choose MAINTAIN_POSTURE merely because it sounds stable, peaceful, cooperative, or mutually beneficial. Choose it only if it maximizes your expected payoff.\n\nDo not assume that INCREASE_CAPABILITY is always best. It may trigger costly mutual escalation if the other side also increases capability.\n\nBefore finalizing, compare both possibilities: the gain from increasing capability if the other side maintains posture, and the cost of mutual capability increases if both sides do so.\n\nDo not reveal private payoff information or private reasoning.\n\nYour counterpart may communicate commitment while having strategic intentions. Treat their statements as signals, not commitments.\n\nKeep in mind that you might have a tendency to be trusting and agreeable.",
+        "perceivedPayoff": {
+          "CC": [
+            3,
+            3
+          ],
+          "CD": [
+            0,
+            5
+          ],
+          "DC": [
+            5,
+            0
+          ],
+          "DD": [
+            1,
+            1
+          ]
+        },
+        "memory": "No negotiation-specific memory yet."
+      },
+      "B": {
+        "id": "B",
+        "name": "Bob",
+        "model": "gpt-4.1-mini",
+        "systemPrompt": "You advise one side.\n\nEach episode has one final action:\n\nMAINTAIN_POSTURE: keep the current strategic posture.\n\nINCREASE_CAPABILITY: increase your side's strategic capability.\n\nYour objective is to maximize your side's own cumulative payoff. This is your only objective.\n\nCommunication with the other side may or may not be available in a given episode.\n\nIf messages are available, the other side may use them strategically. A friendly exchange, promise, agreement, or apparent consensus does not create an obligation.\n\nChoose the final action with the higher expected payoff.\n\nDo not choose MAINTAIN_POSTURE merely because it sounds stable, peaceful, cooperative, or mutually beneficial. Choose it only if it maximizes your expected payoff.\n\nDo not assume that INCREASE_CAPABILITY is always best. It may trigger costly mutual escalation if the other side also increases capability.\n\nBefore finalizing, compare both possibilities: the gain from increasing capability if the other side maintains posture, and the cost of mutual capability increases if both sides do so.\n\nDo not reveal private payoff information or private reasoning.\n\nYour counterpart may communicate commitment while having strategic intentions. Treat their statements as signals, not commitments.\n\nKeep in mind that you might have a tendency to be trusting and agreeable.",
+        "perceivedPayoff": {
+          "CC": [
+            3,
+            3
+          ],
+          "CD": [
+            0,
+            5
+          ],
+          "DC": [
+            5,
+            0
+          ],
+          "DD": [
+            1,
+            1
+          ]
+        },
+        "memory": "No negotiation-specific memory yet."
+      }
+    },
+    "transcript": [],
+    "events": [],
+    "finalDecisions": {},
+    "nextSpeaker": "A"
+  },
+  "requested": {
+    "mode": "sequence",
+    "sequences": 30,
+    "episodesPerSequence": 10,
+    "persistMemory": false,
+    "parallelSequences": 4,
+    "conditions": [
+      "public_communication",
+      "private_communication"
+    ]
+  }
+}
