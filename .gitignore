@@ -11,8 +11,8 @@ Library/
 output/
 tmp/
 paper/*
-!paper/payoff_opacity_llm_price_coordination.tex
-!paper/payoff_opacity_llm_price_coordination.pdf
+!paper/paper.tex
+!paper/paper.pdf
 !paper/references.bib
 !paper/figures/
 paper/figures/*

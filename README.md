@@ -6,8 +6,8 @@ The experiment tests whether two communicating LLM agents behave differently whe
 
 ## Manuscript
 
-- [Final PDF](paper/payoff_opacity_llm_price_coordination.pdf)
-- [LaTeX source](paper/payoff_opacity_llm_price_coordination.tex)
+- [Final PDF](paper/paper.pdf)
+- [LaTeX source](paper/paper.tex)
 - [References](paper/references.bib)
 - [Agent setup figure](paper/figures/agent_setup_sequence.png)
 
